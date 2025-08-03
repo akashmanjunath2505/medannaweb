@@ -77,14 +77,12 @@ function getAi(): GoogleGenAI {
         return ai;
     }
 
-    // This check prevents a ReferenceError in browser environments that don't polyfill `process`.
+    // Use env variable if available, otherwise fallback to hardcoded key
     const apiKey = (typeof process !== 'undefined' && process.env && process.env.GEMINI_API_KEY)
         ? process.env.GEMINI_API_KEY
-        : undefined;
+        : "AIzaSyCwhzGqRTqLUXVJXwzVupW-BDUNJEM3Ak0";
 
     if (!apiKey) {
-        // Throwing an error here is better because all calling functions expect an AI instance.
-        // The error will be caught by the calling function's try-catch block in the UI layer.
         throw new Error("Gemini API key not found. Please ensure the GEMINI_API_KEY environment variable is set.");
     }
     
