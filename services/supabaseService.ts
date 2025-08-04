@@ -58,7 +58,14 @@ export type Database = {
           id?: number
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "case_logs_user_id_fkey"
+            columns: ["user_id"]
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       leaderboard: {
         Row: {
@@ -73,7 +80,15 @@ export type Database = {
           score?: number
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "leaderboard_user_id_fkey"
+            columns: ["user_id"]
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+            isOneToOne: true
+          },
+        ]
       }
       profiles: {
         Row: {
@@ -91,7 +106,15 @@ export type Database = {
           full_name?: string | null
           id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "profiles_id_fkey"
+            columns: ["id"]
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+            isOneToOne: true
+          },
+        ]
       }
       progress: {
         Row: {
@@ -112,7 +135,15 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "progress_user_id_fkey"
+            columns: ["user_id"]
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+            isOneToOne: true
+          },
+        ]
       }
       streaks: {
         Row: {
@@ -133,7 +164,15 @@ export type Database = {
           max_streak?: number
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "streaks_user_id_fkey"
+            columns: ["user_id"]
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+            isOneToOne: true
+          },
+        ]
       }
     }
     Views: {
@@ -393,7 +432,7 @@ export const getLeaderboard = async (): Promise<any[]> => {
         return botUsers; // Return bots if fetching fails
     }
     
-    const users = (realUsers || []) as { user_id: string, score: number, profiles: { full_name: string | null } | null }[];
+    const users = realUsers || [];
 
     // Filter out any real users that might be duplicated by bots
     const realUserIds = new Set(users.map(u => u.user_id));

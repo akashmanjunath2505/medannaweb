@@ -358,7 +358,7 @@ const AppContextProvider = ({ children }: { children: ReactNode }) => {
                 setLeaderboard([]);
             }
             
-            // Once we have determined the auth state, we can hide the initial loader.
+            // Once we have determined the auth state, we can hide the anitial loader.
             // Data will continue to populate in the background.
             setIsAuthLoading(false);
         });
@@ -1562,12 +1562,15 @@ const ChatWindow = () => {
     }, [currentCase]);
 
     const getVoiceId = (gender: 'Male' | 'Female' | 'Other', age: number) => {
-        if (age < 18) return 'jBpfuIE2ac6zRgDcFDCV'; // Child-like voice (Gigi)
-        if (gender === 'Male') {
-            return age > 40 ? 'VR6AewLTigWG4xSOhOAm' : 'SOYHLrjzK2X1ezoPC6cr'; // Drew (older), Harry (younger)
+        // Use standard, free voices that are reliably available
+        if (age < 18) {
+            return 'EXAVITQu4vr4xnSDxMaL'; // "Bella" (younger female, good for children/adolescents)
         }
-        // Default to Female for 'Other' or 'Female'
-        return age > 40 ? 'ThT5KcBeYPX3keUQqHPh' : '21m00Tcm4TlvDq8ikWAM'; // Rachel (older), Bella (younger)
+        if (gender === 'Male') {
+            return 'pNInz6obpgDQGcFmaJgB'; // "Adam" (standard male voice)
+        }
+        // Default to female for 'Female' or 'Other'
+        return '21m00Tcm4TlvDq8ikWAM'; // "Rachel" (standard female voice)
     };
 
     const speak = useCallback(async (text: string, gender: 'Male' | 'Female' | 'Other', age: number) => {
