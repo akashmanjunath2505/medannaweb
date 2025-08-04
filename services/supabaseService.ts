@@ -107,13 +107,9 @@ export type Database = {
           id?: string
         }
         Relationships: [
-          {
-            foreignKeyName: "profiles_id_fkey"
-            columns: ["id"]
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-            isOneToOne: true
-          },
+          // This relationship to the built-in 'users' table was causing a
+          // 'Type instantiation is excessively deep and possibly infinite' error.
+          // Removing it resolves the issue, as the app logic does not rely on a typed join here.
         ]
       }
       progress: {
@@ -242,7 +238,7 @@ export const getUserProfile = async (userId: string): Promise<Database['public']
     return data;
 };
 
-export const updateUserProfile = async (userId: string, updates: Database['public']['Tables']['profiles']['Update']): Promise<Profile> => {
+export const updateUserProfile = async (userId: string, updates: Database['public']['Tables']['profiles']['Update']): Promise<Profile | null> => {
     const { data, error } = await supabase
         .from('profiles')
         .update(updates)
@@ -250,8 +246,11 @@ export const updateUserProfile = async (userId: string, updates: Database['publi
         .select('id, full_name, email')
         .single();
 
-    if (error) throw error;
-    if (!data) throw new Error("Profile not found after update.");
+    if (error) {
+        console.error('Error updating profile', error);
+        throw error;
+    };
+    if (!data) return null;
 
 
     // We need to return a full profile, so we get the training_phase from auth metadata
@@ -340,6 +339,7 @@ export const logCaseCompletion = async (
         const progressUpsert: Database['public']['Tables']['progress']['Insert'] = {
             user_id: userId,
             completed: currentProgress + 1,
+            updated_at: new Date().toISOString(),
         };
         
         // Prepare Streak update data
@@ -380,9 +380,9 @@ export const logCaseCompletion = async (
         // --- 3. EXECUTE all writes ---
         const writes = await Promise.all([
             supabase.from('case_logs').insert(caseLogInsert),
-            supabase.from('progress').upsert(progressUpsert),
-            supabase.from('streaks').upsert(streakUpsert),
-            supabase.from('leaderboard').upsert(leaderboardUpsert),
+            supabase.from('progress').upsert(progressUpsert, { onConflict: 'user_id' }),
+            supabase.from('streaks').upsert(streakUpsert, { onConflict: 'user_id' }),
+            supabase.from('leaderboard').upsert(leaderboardUpsert, { onConflict: 'user_id' }),
         ]);
 
         // Check for errors in any of the write operations

@@ -51,30 +51,30 @@ const HINT_STORAGE_KEY = 'medanna_hintUsage_v2';
 const VIDEO_FILENAMES: string[] = [
     'adolescent_boy_idle_(age-15-22) (540p).mp4',
     'adolescent_boy_talking_(age-15-22) (540p).mp4',
-    'adolescent_girl_idle.mp4',
     'adolescent_girl_idle(age_15-22) (540p).mp4',
-    'adolescent_girl_talking.mp4',
+    'adolescent_girl_idle.mp4',
     'adolescent_girl_talking(age_15-22) (540p).mp4',
+    'adolescent_girl_talking.mp4',
     'boy_idle(age__7-15) (540p).mp4',
     'boy_talking(age__7-15) (540p).mp4',
     'girl_idle(age__7-15) (540p).mp4',
     'girl_talking(age__7-15) (540p).mp4',
-    'lady_idle(age__30-45) (540p).mp4',
     'lady_idle(age_23-30) (720p).mp4',
+    'lady_idle(age__30-45) (540p).mp4',
     'lady_talking(age_23-30) (540p).mp4',
-    'lady_talking(age_30-45) (540p)(1).mp4',
-    'lady_talking(age_30-45) (540p).mp4',
+    'lady_talking(age__30-45) (540p)(1).mp4',
+    'lady_talking(age__30-45) (540p).mp4',
     'man_idle(age_23-30) (540p).mp4',
-    'man_idle(age_30-45) (540p).mp4',
+    'man_idle(age__30-45) (540p).mp4',
     'man_talking(age_23-30) (540p).mp4',
-    'man_talking(age_30-45) (540p).mp4',
-    'old_man_idle(age_45-60) (540p)(1).mp4',
-    'old_man_idle(age_45-60) (540p).mp4',
-    'old_man_idle(age_60+) (540p).mp4',
-    'old_man_talking(age_45-60) (540p).mp4',
-    'old_man_talking(age_60+) (540p).mp4',
-    'old_woman_idle(age_60+) (540p).mp4',
-    'old_woman_talking(age_60+) (540p).mp4',
+    'man_talking(age__30-45) (540p).mp4',
+    'old_man_idle(age__45-60) (540p)(1).mp4',
+    'old_man_idle(age__45-60) (540p).mp4',
+    'old_man_idle(age__60+) (540p).mp4',
+    'old_man_talking(age__45-60) (540p).mp4',
+    'old_man_talking(age__60+) (540p).mp4',
+    'old_woman_idle(age__60+) (540p).mp4',
+    'old_woman_talking(age__60+) (540p).mp4',
 ];
 
 
@@ -1484,6 +1484,7 @@ const PatientVisualizer = () => {
                         className={`patient-video ${isSpeaking ? 'visible' : ''}`}
                         muted
                         playsInline
+                        loop
                     />
                 </>
             ) : (
