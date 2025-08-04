@@ -4,7 +4,7 @@
 */
 import React, { useState, useEffect, useCallback, useRef, StrictMode, ReactNode, createContext, useContext, useMemo } from 'react';
 import { createRoot } from 'react-dom/client';
-import { generateCase, createChatForCase, DiagnosticCase, MCQ, generateSoapNoteForCase, generateHint, CaseTags, GenerationFilters, Chat } from './services/geminiService';
+import { generateCase, createChatForCase, DiagnosticCase, MCQ, generateSoapNoteForCase, generateHint, CaseTags, GenerationFilters, Chat, pickSpecialtyForCase } from './services/geminiService';
 import { supabase, signIn, signUp, signOut, getUserProfile, updateUserProfile, getCaseLogs, logCaseCompletion, getLeaderboard, getStreak, Profile, Streak, CaseLog, getUserScore } from './services/supabaseService';
 import { Session, User } from '@supabase/supabase-js';
 
@@ -32,6 +32,14 @@ interface CaseResultPayload {
     score: number;
 }
 
+interface ParsedVideo {
+    file: string;
+    state: 'idle' | 'talking';
+    gender: 'Male' | 'Female';
+    min_age: number;
+    max_age: number;
+}
+
 
 // --- CONSTANTS & SEED DATA ---
 const ALL_SPECIALTIES: Specialty[] = ['Internal Medicine', 'Pediatrics', 'Surgery', 'Obstetrics & Gynecology', 'Psychiatry', 'Cardiology', 'Neurology', 'Dermatology', 'Emergency Medicine'];
@@ -39,6 +47,35 @@ const ALL_TRAINING_PHASES: TrainingPhase[] = ['Pre-clinical', 'Para-clinical', '
 const ALL_EPAS: EPA[] = ['History-taking', 'Physical Exam', 'Diagnosis', 'Management'];
 const MAX_HINTS = 10;
 const HINT_STORAGE_KEY = 'medanna_hintUsage_v2';
+
+const VIDEO_FILENAMES: string[] = [
+    'adolescent_boy_idle_(age-15-22)_(540p).mp4',
+    'adolescent_boy_talking_(age-15-22)_(540p).mp4',
+    'adolescent_girl_idle(age_15-22)_(540p).mp4',
+    'adolescent_girl_idle.mp4',
+    'adolescent_girl_talking(age_15-22)_(540p).mp4',
+    'adolescent_girl_talking.mp4',
+    'boy_idle(age_7-15)_(540p).mp4',
+    'boy_talking(age_7-15)_(540p).mp4',
+    'girl_idle(age_7-15)_(540p).mp4',
+    'girl_talking(age_7-15)_(540p).mp4',
+    'lady_idle(age_23-30)_(720p).mp4',
+    'lady_idle(age_30-45)_(540p).mp4',
+    'lady_talking(age_23-30)_(540p).mp4',
+    'lady_talking(age_30-45)_(540p)(1).mp4',
+    'lady_talking(age_30-45)_(540p).mp4',
+    'man_idle(age_23-30)_(540p).mp4',
+    'man_idle(age_30-45)_(540p).mp4',
+    'man_talking(age_23-30)_(540p).mp4',
+    'man_talking(age_30-45)_(540p).mp4',
+    'old_man_idle(age_45-60)_(540p)(1).mp4',
+    'old_man_idle(age_45-60)_(540p).mp4',
+    'old_man_idle(age_60+)_(540p).mp4',
+    'old_man_talking(age_45-60)_(540p).mp4',
+    'old_man_talking(age_60+)_(540p).mp4',
+    'old_woman_idle(age_60+)_(540p).mp4',
+    'old_woman_talking(age_60+)_(540p).mp4',
+];
 
 
 const MEDICAL_FUN_FACTS: Record<Specialty | 'General', string[]> = {
@@ -172,6 +209,9 @@ interface AppContextType {
     hintError: string | null;
     handleGenerateHint: (chatHistory: ChatMessage[]) => Promise<void>;
     clearHint: () => void;
+
+    // Patient Video
+    patientVideos: { idle: string | null; talking: string | null };
 }
 
 const AppContext = createContext<AppContextType | null>(null);
@@ -181,6 +221,40 @@ const useAppContext = (): AppContextType => {
     if (!context) throw new Error("useAppContext must be used within an AppContextProvider");
     return context;
 };
+
+// --- HELPER FUNCTIONS ---
+const parseVideoFilename = (filename: string): ParsedVideo | null => {
+    const state = filename.includes('talking') ? 'talking' : 'idle';
+
+    let gender: 'Male' | 'Female' | null = null;
+    if (filename.includes('boy') || filename.includes('man')) gender = 'Male';
+    if (filename.includes('girl') || filename.includes('lady') || filename.includes('woman')) gender = 'Female';
+
+    if (!gender) return null;
+
+    let min_age = 0, max_age = 100;
+    
+    const ageRangeMatch = filename.match(/\(age_?-?(\d+)-(\d+)\)/);
+    const agePlusMatch = filename.match(/\(age_?-?(\d+)\+\)/);
+
+    if (ageRangeMatch) {
+        min_age = parseInt(ageRangeMatch[1], 10);
+        max_age = parseInt(ageRangeMatch[2], 10);
+    } else if (agePlusMatch) {
+        min_age = parseInt(agePlusMatch[1], 10);
+        max_age = 120; // Set a high upper bound for "60+"
+    } else {
+        // Infer from subject if no explicit age range
+        if (filename.startsWith('adolescent')) { min_age = 13; max_age = 19; }
+        else if (filename.startsWith('boy') || filename.startsWith('girl')) { min_age = 7; max_age = 12; }
+        else if (filename.startsWith('man') || filename.startsWith('lady')) { min_age = 20; max_age = 45; }
+        else if (filename.startsWith('old_man') || filename.startsWith('old_woman')) { min_age = 46; max_age = 120; }
+        else return null; // Cannot determine age range
+    }
+
+    return { file: filename, state, gender, min_age, max_age };
+};
+
 
 const AppContextProvider = ({ children }: { children: ReactNode }) => {
     // Auth & Profile State
@@ -214,6 +288,10 @@ const AppContextProvider = ({ children }: { children: ReactNode }) => {
     const [isGeneratingHint, setIsGeneratingHint] = useState(false);
     const [hintError, setHintError] = useState<string | null>(null);
     const [hintCount, setHintCount] = useState(MAX_HINTS);
+
+    // Video State
+    const [patientVideos, setPatientVideos] = useState<{ idle: string | null; talking: string | null }>({ idle: null, talking: null });
+    const videoData = useMemo(() => VIDEO_FILENAMES.map(parseVideoFilename).filter(Boolean) as ParsedVideo[], []);
 
     const fetchAllUserData = async (user: User) => {
         try {
@@ -252,34 +330,36 @@ const AppContextProvider = ({ children }: { children: ReactNode }) => {
         window.addEventListener('resize', handleResize);
 
         // Handle Auth
-        const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+        const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
             setSession(session);
             
-            // For user metadata updates, just update the profile state silently
-            // without a full-page loader or refetching all data.
+            // For user metadata updates, update profile silently without a full-page loader or refetching all data.
             if (event === 'USER_UPDATED' && session?.user) {
                 setProfile(prevProfile => {
-                    // Only update if there's an existing profile to prevent race conditions on sign-in.
-                    if (!prevProfile) return null; 
+                    if (!prevProfile) return null; // Avoid race conditions on initial sign-in.
                     return {
                         ...prevProfile,
                         training_phase: session.user.user_metadata.training_phase || null
                     };
                 });
-                return;
+                return; // Don't affect loading state or fetch all data again.
             }
 
-            // For major auth events (sign-in, sign-out, initial session), do a full data load.
-            setIsAuthLoading(true);
+            // For major auth events (sign-in, sign-out, initial session), update all data.
             if (session?.user) {
-                await fetchAllUserData(session.user);
+                // Fetch user data in the background without awaiting. This prevents UI blocking.
+                fetchAllUserData(session.user);
             } else {
+                // If there's no session, clear all user-related data.
                 setProfile(null);
                 setStreak(null);
                 setScore(null);
                 setCaseLogs([]);
                 setLeaderboard([]);
             }
+            
+            // Once we have determined the auth state, we can hide the initial loader.
+            // Data will continue to populate in the background.
             setIsAuthLoading(false);
         });
 
@@ -341,6 +421,64 @@ const AppContextProvider = ({ children }: { children: ReactNode }) => {
         }
     };
 
+    const loadPatientVideos = async (profile: DiagnosticCase['patientProfile']) => {
+        if (videoData.length === 0) {
+            console.warn("No video data is available, cannot find patient videos.");
+            setPatientVideos({ idle: null, talking: null });
+            return;
+        }
+
+        const findBestVideo = (state: 'idle' | 'talking'): string | null => {
+            const { gender, age, ethnicity } = profile;
+            const availableVideos = videoData.filter(v => v.state === state);
+
+            let bestMatch: ParsedVideo | null = null;
+            let highestScore = -1;
+
+            for (const video of availableVideos) {
+                let score = 0;
+                // Gender match is most important
+                if (video.gender === gender) score += 4;
+                // Age match is next
+                if (age >= video.min_age && age <= video.max_age) score += 2;
+                
+                if (score > highestScore) {
+                    highestScore = score;
+                    bestMatch = video;
+                }
+            }
+
+            // Fallback to a default if no decent match is found
+            if (!bestMatch) {
+                bestMatch = availableVideos.find(v => v.file.includes('man_idle') || v.file.includes('lady_idle')) || availableVideos[0] || null;
+            }
+
+            return bestMatch ? `/videos/${bestMatch.file}` : null;
+        };
+        
+        const idleUrl = findBestVideo('idle');
+        const talkingUrl = findBestVideo('talking');
+
+        const preload = (url: string | null) => {
+            if (!url) return Promise.reject(new Error("No URL provided for preload"));
+            return fetch(url).then(res => { if (!res.ok) throw new Error(`Video not found at ${url}`); });
+        };
+        
+        const preloadResults = await Promise.allSettled([preload(idleUrl), preload(talkingUrl)]);
+        
+        const finalIdleUrl = preloadResults[0].status === 'fulfilled' ? idleUrl : null;
+        const finalTalkingUrl = preloadResults[1].status === 'fulfilled' ? talkingUrl : null;
+
+        if (finalIdleUrl !== idleUrl || finalTalkingUrl !== talkingUrl) {
+            console.warn("One or more patient videos failed to load. The visualizer may fall back to the icon.", {
+                idle: { requested: idleUrl, loaded: finalIdleUrl },
+                talking: { requested: talkingUrl, loaded: finalTalkingUrl },
+            });
+        }
+
+        setPatientVideos({ idle: finalIdleUrl, talking: finalTalkingUrl });
+    };
+
     const handleStartNewCase = useCallback((caseData: DiagnosticCase) => {
         if (!caseData?.title) {
             console.error("handleStartNewCase was called with invalid data.");
@@ -356,7 +494,19 @@ const AppContextProvider = ({ children }: { children: ReactNode }) => {
         setIsGenerating(true);
         setGenerationError(null);
         try {
-            const newCase = await generateCase(filters);
+            let filtersForGeneration = { ...filters };
+
+            // If no specialty is selected by the user, have the AI pick one.
+            // This ensures the fun facts are relevant even for random cases.
+            if (!filtersForGeneration.specialties || filtersForGeneration.specialties.length === 0) {
+                const pickedSpecialty = await pickSpecialtyForCase(filters.trainingPhase);
+                filtersForGeneration.specialties = [pickedSpecialty];
+                // Update the context again so the splash screen can react and show specialty-specific facts.
+                setGenerationFilters(filtersForGeneration);
+            }
+            
+            const newCase = await generateCase(filtersForGeneration);
+            await loadPatientVideos(newCase.patientProfile);
             handleStartNewCase(newCase);
         } catch (error) {
             console.error("Case generation failed:", error);
@@ -396,6 +546,8 @@ const AppContextProvider = ({ children }: { children: ReactNode }) => {
         localStorage.setItem(HINT_STORAGE_KEY, JSON.stringify({ count: newCount, date: today }));
     };
 
+
+
     const handleGenerateHint = async (chatHistory: ChatMessage[]) => {
         if (!currentCase || hintCount <= 0) return;
         setIsGeneratingHint(true);
@@ -423,7 +575,8 @@ const AppContextProvider = ({ children }: { children: ReactNode }) => {
         page, setPage, theme, toggleTheme, isMobile,
         isGenerating, generationError, generationFilters, currentCase, handleStartNewCase, handleGenerateAndStart, handleRegenerateCase,
         soapNote, isGeneratingSoapNote, soapNoteError, handleGenerateSoapNote,
-        hint, hintCount, isGeneratingHint, hintError, handleGenerateHint, clearHint
+        hint, hintCount, isGeneratingHint, hintError, handleGenerateHint, clearHint,
+        patientVideos
     };
 
     return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
@@ -967,23 +1120,28 @@ const GeneratingCaseSplash = () => {
     
     useEffect(() => {
         const factsPool = getFactsPool();
-        // Set initial fact
-        setFact(factsPool[Math.floor(Math.random() * factsPool.length)]);
+        // Set initial fact, ensure it's not undefined if pool is empty
+        setFact(factsPool[Math.floor(Math.random() * factsPool.length)] || "Loading...");
 
         const interval = setInterval(() => {
             setFade(false); // Start fade out
             setTimeout(() => {
-                let newFact;
-                do {
-                    newFact = factsPool[Math.floor(Math.random() * factsPool.length)];
-                } while (newFact === fact && factsPool.length > 1); // Avoid repeating the same fact
-                setFact(newFact);
+                setFact(currentFact => {
+                    const currentPool = getFactsPool(); // Re-evaluate pool in case filters changed
+                    if (currentPool.length === 0) return "Loading...";
+                    let newFact;
+                    do {
+                        newFact = currentPool[Math.floor(Math.random() * currentPool.length)];
+                    } while (newFact === currentFact && currentPool.length > 1); // Avoid repeating the same fact
+                    return newFact;
+                });
                 setFade(true); // Start fade in
             }, 500); // Time for fade out transition
         }, 5000); // Change fact every 5 seconds
 
         return () => clearInterval(interval);
-    }, [getFactsPool, fact]);
+    }, [getFactsPool]);
+
 
     return (
         <div className="splash-overlay">
@@ -1265,8 +1423,10 @@ const SimulationPage = () => {
 
 
 const PatientVisualizer = () => {
-    const { currentCase } = useAppContext();
+    const { currentCase, patientVideos } = useAppContext();
     const [isSpeaking, setIsSpeaking] = useState(false);
+    const idleVideoRef = useRef<HTMLVideoElement>(null);
+    const talkingVideoRef = useRef<HTMLVideoElement>(null);
 
     useEffect(() => {
         const handleSpeechStart = () => setIsSpeaking(true);
@@ -1278,27 +1438,72 @@ const PatientVisualizer = () => {
             window.removeEventListener('speech-end', handleSpeechEnd);
         };
     }, []);
+
+    useEffect(() => {
+        const idleVideo = idleVideoRef.current;
+        const talkingVideo = talkingVideoRef.current;
+
+        if (!idleVideo || !talkingVideo) return;
+
+        if (isSpeaking) {
+            idleVideo.pause();
+            talkingVideo.currentTime = 0;
+            talkingVideo.play().catch(e => console.error("Talking video playback failed:", e));
+        } else {
+            talkingVideo.pause();
+            idleVideo.play().catch(e => console.error("Idle video playback failed:", e));
+        }
+    }, [isSpeaking, patientVideos]);
     
     if (!currentCase) return null;
 
     const patientName = currentCase.patientProfile.age < 7 
         ? `${currentCase.patientProfile.name}'s Mother` 
         : currentCase.patientProfile.name;
+        
+    const hasVideos = patientVideos.idle && patientVideos.talking;
 
     return (
         <div className="patient-visualizer">
-            <div className={`patient-icon ${isSpeaking ? 'speaking' : ''}`}>
-                <IconPatient />
-            </div>
-            <h3 className="patient-name">{patientName}</h3>
-            {isSpeaking && 
-                <div className="speaking-indicator">
-                    <span className="speaking-indicator-bar"></span>
-                    <span className="speaking-indicator-bar"></span>
-                    <span className="speaking-indicator-bar"></span>
-                    <span className="speaking-indicator-bar"></span>
+            {hasVideos ? (
+                <>
+                    <video
+                        key={patientVideos.idle}
+                        ref={idleVideoRef}
+                        src={patientVideos.idle!}
+                        className={`patient-video ${!isSpeaking ? 'visible' : ''}`}
+                        autoPlay
+                        loop
+                        muted
+                        playsInline
+                    />
+                    <video
+                        key={patientVideos.talking}
+                        ref={talkingVideoRef}
+                        src={patientVideos.talking!}
+                        className={`patient-video ${isSpeaking ? 'visible' : ''}`}
+                        muted
+                        playsInline
+                    />
+                </>
+            ) : (
+                <div className="patient-icon-fallback">
+                    <div className={`patient-icon ${isSpeaking ? 'speaking' : ''}`}>
+                        <IconPatient />
+                    </div>
                 </div>
-            }
+            )}
+            <div className="patient-overlay-content">
+                <h3 className="patient-name">{patientName}</h3>
+                {isSpeaking && 
+                    <div className="speaking-indicator">
+                        <span className="speaking-indicator-bar"></span>
+                        <span className="speaking-indicator-bar"></span>
+                        <span className="speaking-indicator-bar"></span>
+                        <span className="speaking-indicator-bar"></span>
+                    </div>
+                }
+            </div>
         </div>
     );
 };
@@ -1311,23 +1516,16 @@ const ChatWindow = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [isMuted, setIsMuted] = useState(false);
     const [speechError, setSpeechError] = useState<string | null>(null);
-    const [speechSupported, setSpeechSupported] = useState(true);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const messagesRef = useRef(messages);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
+    const audioRef = useRef<HTMLAudioElement | null>(null);
     messagesRef.current = messages; // Keep ref updated with the latest messages
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages]);
 
-    useEffect(() => {
-        if (!('speechSynthesis' in window)) {
-            setSpeechSupported(false);
-            setSpeechError('Text-to-speech is not supported in this browser.');
-        }
-    }, []);
-    
     useEffect(() => {
         if (!currentCase) return;
         const chatHistoryKey = `chatHistory_${currentCase.title}`;
@@ -1355,39 +1553,82 @@ const ChatWindow = () => {
                  // If there are no messages, remove the key to keep storage clean
                 localStorage.removeItem(chatHistoryKey);
             }
+            // Stop any ongoing speech when component unmounts
+            if (audioRef.current) {
+                audioRef.current.pause();
+                window.dispatchEvent(new CustomEvent('speech-end'));
+            }
         };
     }, [currentCase]);
 
-    const speak = useCallback(async (text: string, gender: 'Male' | 'Female' | 'Other') => {
-        setSpeechError(null);
-        if (isMuted || !text || !speechSupported) return;
+    const getVoiceId = (gender: 'Male' | 'Female' | 'Other', age: number) => {
+        if (age < 18) return 'jBpfuIE2ac6zRgDcFDCV'; // Child-like voice (Gigi)
+        if (gender === 'Male') {
+            return age > 40 ? 'VR6AewLTigWG4xSOhOAm' : 'SOYHLrjzK2X1ezoPC6cr'; // Drew (older), Harry (younger)
+        }
+        // Default to Female for 'Other' or 'Female'
+        return age > 40 ? 'ThT5KcBeYPX3keUQqHPh' : '21m00Tcm4TlvDq8ikWAM'; // Rachel (older), Bella (younger)
+    };
 
-        // Clean text for synthesis
+    const speak = useCallback(async (text: string, gender: 'Male' | 'Female' | 'Other', age: number) => {
+        const ELEVENLABS_API_KEY = "sk_93aed662e047c36df99f3a065658936bb3e829158c9c29e5";
+        setSpeechError(null);
+        if (isMuted || !text) return;
+
+        // Stop any currently playing audio
+        if (audioRef.current) {
+            audioRef.current.pause();
+        }
+
         const cleanText = text.replace(/\*.*?\*/g, '').replace(/\s+/g, ' ').trim();
         if (!cleanText) return;
-
+        
         window.dispatchEvent(new CustomEvent('speech-start'));
-
-        // --- Browser TTS ---
-        const utterance = new SpeechSynthesisUtterance(cleanText);
-        const voices = window.speechSynthesis.getVoices();
         
-        let selectedVoice = voices.find(v => v.lang.startsWith('en') && v.name.includes('Google') && (gender === 'Male' ? v.name.includes('Male') : !v.name.includes('Male')));
-        if (!selectedVoice) selectedVoice = voices.find(v => v.lang.startsWith('en') && (gender === 'Male' ? v.name.includes('Male') : !v.name.includes('Male')));
-        if (!selectedVoice) selectedVoice = voices.find(v => v.lang.startsWith('en'));
-
-        if(selectedVoice) utterance.voice = selectedVoice;
-        
-        utterance.onend = () => window.dispatchEvent(new CustomEvent('speech-end'));
-        utterance.onerror = (e) => {
-            console.error("Browser speech synthesis error:", e);
-            setSpeechError("Browser text-to-speech failed.");
-            window.dispatchEvent(new CustomEvent('speech-end'));
+        const voiceId = getVoiceId(gender, age);
+        const url = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`;
+        const headers = {
+            'Accept': 'audio/mpeg',
+            'Content-Type': 'application/json',
+            'xi-api-key': ELEVENLABS_API_KEY
         };
-        
-        window.speechSynthesis.cancel(); // Cancel any previous speech
-        window.speechSynthesis.speak(utterance);
-    }, [isMuted, speechSupported]);
+        const body = JSON.stringify({
+            text: cleanText,
+            model_id: 'eleven_multilingual_v2',
+            voice_settings: { stability: 0.5, similarity_boost: 0.75 }
+        });
+
+        try {
+            const response = await fetch(url, { method: 'POST', headers, body });
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.detail?.message || `HTTP error! status: ${response.status}`);
+            }
+            const blob = await response.blob();
+            const audioUrl = URL.createObjectURL(blob);
+            const audio = new Audio(audioUrl);
+            audioRef.current = audio;
+            audio.play();
+
+            audio.onended = () => {
+                window.dispatchEvent(new CustomEvent('speech-end'));
+                URL.revokeObjectURL(audioUrl);
+                audioRef.current = null;
+            };
+            audio.onerror = (e) => {
+                console.error("Audio playback error:", e);
+                setSpeechError("Failed to play patient audio.");
+                window.dispatchEvent(new CustomEvent('speech-end'));
+                URL.revokeObjectURL(audioUrl);
+                audioRef.current = null;
+            };
+
+        } catch (error) {
+            console.error("ElevenLabs API error:", error);
+            setSpeechError(`Text-to-speech failed. ${error instanceof Error ? error.message : "Unknown error"}`);
+            window.dispatchEvent(new CustomEvent('speech-end'));
+        }
+    }, [isMuted]);
 
     const handleSendMessage = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -1400,8 +1641,8 @@ const ChatWindow = () => {
             const response = await chat.sendMessage({ message: userInput });
             const patientMessage: ChatMessage = { sender: 'patient', text: response.text, timestamp: new Date().toISOString() };
             setMessages(prev => [...prev, patientMessage]);
-            if(currentCase?.patientProfile.gender) {
-                speak(response.text, currentCase.patientProfile.gender);
+            if(currentCase?.patientProfile) {
+                speak(response.text, currentCase.patientProfile.gender, currentCase.patientProfile.age);
             }
         } catch (error) {
             console.error('Error sending message:', error);
@@ -1459,10 +1700,9 @@ const ChatWindow = () => {
                     className="icon-button" 
                     onClick={() => setIsMuted(!isMuted)} 
                     aria-label={isMuted ? 'Unmute' : 'Mute'}
-                    disabled={!speechSupported}
-                    title={!speechSupported ? 'Speech synthesis not supported' : (isMuted ? 'Unmute' : 'Mute')}
+                    title={isMuted ? 'Unmute' : 'Mute'}
                 >
-                    {!speechSupported ? <IconVolumeOff /> : (isMuted ? <IconVolumeOff /> : <IconVolume />)}
+                    {isMuted ? <IconVolumeOff /> : <IconVolume />}
                 </button>
                 <textarea ref={textareaRef} value={userInput} onChange={e => setUserInput(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(e); } }}

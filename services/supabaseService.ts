@@ -58,14 +58,7 @@ export type Database = {
           id?: number
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "case_logs_user_id_fkey"
-            columns: ["user_id"]
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          }
-        ]
+        Relationships: []
       }
       leaderboard: {
         Row: {
@@ -80,14 +73,7 @@ export type Database = {
           score?: number
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "leaderboard_user_id_fkey"
-            columns: ["user_id"]
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          }
-        ]
+        Relationships: []
       }
       profiles: {
         Row: {
@@ -105,14 +91,7 @@ export type Database = {
           full_name?: string | null
           id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "profiles_id_fkey"
-            columns: ["id"]
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          }
-        ]
+        Relationships: []
       }
       progress: {
         Row: {
@@ -133,14 +112,7 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "progress_user_id_fkey"
-            columns: ["user_id"]
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          }
-        ]
+        Relationships: []
       }
       streaks: {
         Row: {
@@ -161,27 +133,20 @@ export type Database = {
           max_streak?: number
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "streaks_user_id_fkey"
-            columns: ["user_id"]
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          }
-        ]
+        Relationships: []
       }
     }
     Views: {
-      [_ in never]: never
+      [key: string]: never
     }
     Functions: {
-      [_ in never]: never
+      [key: string]: never
     }
     Enums: {
-      [_ in never]: never
+      [key: string]: never
     }
     CompositeTypes: {
-      [_ in never]: never
+      [key: string]: never
     }
   }
 }
@@ -375,10 +340,10 @@ export const logCaseCompletion = async (
 
         // --- 3. EXECUTE all writes ---
         const writes = await Promise.all([
-            supabase.from('case_logs').insert([caseLogInsert]),
-            supabase.from('progress').upsert(progressUpsert, { onConflict: 'user_id' }),
-            supabase.from('streaks').upsert(streakUpsert, { onConflict: 'user_id' }),
-            supabase.from('leaderboard').upsert(leaderboardUpsert, { onConflict: 'user_id' }),
+            supabase.from('case_logs').insert(caseLogInsert),
+            supabase.from('progress').upsert(progressUpsert),
+            supabase.from('streaks').upsert(streakUpsert),
+            supabase.from('leaderboard').upsert(leaderboardUpsert),
         ]);
 
         // Check for errors in any of the write operations
@@ -428,7 +393,7 @@ export const getLeaderboard = async (): Promise<any[]> => {
         return botUsers; // Return bots if fetching fails
     }
     
-    const users = realUsers || [];
+    const users = (realUsers || []) as { user_id: string, score: number, profiles: { full_name: string | null } | null }[];
 
     // Filter out any real users that might be duplicated by bots
     const realUserIds = new Set(users.map(u => u.user_id));

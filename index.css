@@ -88,7 +88,7 @@ p { color: var(--color-text-secondary); }
 }
 
 /* App Layout */
-.app-container { width: 100%; max-width: 1600px; margin: 0 auto; padding: 2rem; flex-grow: 1; display: flex; flex-direction: column;}
+.app-container { width: 100%; max-width: 1800px; margin: 0 auto; padding: 2rem; flex-grow: 1; display: flex; flex-direction: column;}
 .app-header { padding: 0.75rem 2rem; background-color: var(--color-surface); box-shadow: var(--shadow-sm); display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 1000; }
 .app-header-left, .app-header-right { display: flex; align-items: center; gap: 1rem; }
 .app-header-title-button { background: none; border: none; padding: 0; cursor: pointer; }
@@ -181,7 +181,7 @@ p { color: var(--color-text-secondary); }
 
 .home-content-wrapper { display: flex; flex-direction: column; }
 .home-tab-nav { display: flex; background: transparent; gap: 0.5rem; margin: 0 2rem; border-bottom: 1px solid var(--color-border); z-index: 10;}
-.home-tab-nav .tab-nav-button { padding: 1rem 1.5rem; border-bottom: 3px solid transparent; margin-bottom: -1px; background: transparent; color: var(--color-text-secondary); }
+.home-tab-nav .tab-nav-button { padding: 1rem 1.5rem; border-bottom: 3px solid transparent; margin-bottom: -1px; background: transparent; color: var(--color-text-secondary); flex-shrink: 0; }
 .home-tab-nav .tab-nav-button.active { color: var(--color-primary); border-color: var(--color-primary); }
 .home-content { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--border-radius); border-top-left-radius: 0; border-top-right-radius: 0;}
 
@@ -301,8 +301,29 @@ html[data-theme='dark'] .alert.alert-error { border-color: var(--color-danger); 
     border-radius: var(--border-radius);
     border: 1px solid var(--color-border);
     position: relative;
-    gap: 1rem;
-    padding: 2rem;
+}
+.patient-visualizer .patient-video {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: var(--border-radius);
+    visibility: hidden;
+    opacity: 0;
+    transition: opacity 0.3s ease-in-out;
+}
+.patient-visualizer .patient-video.visible {
+    visibility: visible;
+    opacity: 1;
+}
+.patient-icon-fallback {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 .patient-icon {
     width: 120px;
@@ -316,29 +337,47 @@ html[data-theme='dark'] .alert.alert-error { border-color: var(--color-danger); 
     transition: all 0.3s ease;
     border: 4px solid transparent;
 }
-.patient-icon svg { width: 60px; height: 60px; }
 .patient-icon.speaking {
     color: var(--color-primary);
     background-color: var(--color-primary-light);
     border-color: var(--color-primary);
     box-shadow: 0 0 20px 0 var(--color-primary-light);
 }
-.patient-name { font-size: 1.25rem; font-weight: 700; }
-.speaking-indicator {
+.patient-icon svg { width: 60px; height: 60px; }
+.patient-overlay-content {
     position: absolute;
     bottom: 2rem;
-    left: 50%;
-    transform: translateX(-50%);
+    left: 0;
+    right: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    z-index: 2;
+    padding: 0 1rem;
+}
+.patient-name {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #fff;
+    text-shadow: 1px 1px 3px rgba(0,0,0,0.7);
+}
+.speaking-indicator {
     width: 80px;
     height: 40px;
-    background: var(--color-surface);
+    background: rgba(255, 255, 255, 0.9);
     border-radius: var(--border-radius);
     display: flex;
     justify-content: center;
     align-items: center;
     gap: 5px;
     padding: 0 10px;
-    border: 1px solid var(--color-border);
+    border: 1px solid rgba(0,0,0,0.1);
+    backdrop-filter: blur(4px);
+}
+html[data-theme='dark'] .speaking-indicator {
+    background: rgba(30, 30, 30, 0.9);
+    border-color: rgba(255,255,255,0.1);
 }
 .speaking-indicator-bar {
     width: 4px;
@@ -556,10 +595,10 @@ html[data-theme='dark'] .score-value.high { color: var(--color-success); }
   h1 { font-size: 2rem; }
   h2 { font-size: 1.25rem; }
   .app-container { padding: 1rem; }
+  .app-header { padding: 0.75rem 1rem; }
   .home-header h1 { font-size: 1.8rem; }
   .home-tab-nav { margin: 0 1rem; }
-  .home-tab-nav .tab-nav-button { padding: 0.75rem 1rem; font-size: 0.9rem; }
-
+  
   /* Auth Page Responsive */
   .auth-container { flex-direction: column; max-width: 450px; }
   .auth-decoration-panel { display: none; }
@@ -569,8 +608,8 @@ html[data-theme='dark'] .score-value.high { color: var(--color-success); }
   /* Responsive Tables */
   .activity-log-table, .leaderboard-table { border: 0; }
   .activity-log-table thead, .leaderboard-table thead { border: none; clip: rect(0 0 0 0); height: 1px; margin: -1px; overflow: hidden; padding: 0; position: absolute; width: 1px; }
-  .activity-log-table tr, .leaderboard-table tr { display: block; margin-bottom: 1rem; border: 1px solid var(--color-border); border-radius: var(--border-radius); padding: 0.5rem; box-shadow: var(--shadow-sm); }
-  .activity-log-table td, .leaderboard-table td { display: flex; justify-content: space-between; align-items: center; text-align: right; border-bottom: 1px dashed var(--color-border); padding: 0.75rem 0.5rem; }
+  .activity-log-table tr, .leaderboard-table tr { display: block; margin-bottom: 1rem; border: 1px solid var(--color-border); border-radius: var(--border-radius); padding: 0.5rem 1rem; box-shadow: var(--shadow-sm); }
+  .activity-log-table td, .leaderboard-table td { display: flex; justify-content: space-between; align-items: center; text-align: right; border-bottom: 1px dashed var(--color-border); padding: 0.75rem 0; }
   .activity-log-table tr td:last-child, .leaderboard-table tr td:last-child { border-bottom: 0; }
   .activity-log-table td::before, .leaderboard-table td::before { content: attr(data-label); font-weight: 600; color: var(--color-text-primary); text-align: left; padding-right: 1rem; }
   .leaderboard-table td.rank::before, .activity-log-table td.score::before { font-weight: 600; }
@@ -579,10 +618,36 @@ html[data-theme='dark'] .score-value.high { color: var(--color-success); }
   .activity-log-container, .leaderboard-container { padding: 1rem 0; }
 
   /* Simulation Page Stacking */
-  .simulation-page { display: flex; flex-direction: column; height: auto; gap: 1.5rem; }
-  .simulation-page .central-panel { display: flex; height: 250px; order: -1; }
-  .case-info-panel, .right-panel { max-height: none; height: auto; }
-  .right-panel > .tab-nav { justify-content: center; }
+  .simulation-page {
+    display: flex;
+    flex-direction: column;
+    height: auto;
+    gap: 1.5rem;
+  }
+  /* New vertical stacking order: 1. Visualizer, 2. Case Info, 3. Interactive Panel */
+  .simulation-page .central-panel {
+    order: 1;
+    display: flex; /* Ensure it's visible on mobile */
+    height: 300px;
+  }
+  .case-info-panel {
+    order: 2;
+    max-height: none;
+    height: auto;
+  }
+  .right-panel {
+    order: 3;
+    max-height: none;
+    height: auto;
+  }
+  .right-panel > .tab-nav {
+    justify-content: center;
+  }
+
+  /* Panel Padding Reduction */
+  .panel-header { padding: 1.25rem; }
+  .panel-content { padding: 0 1.25rem 1.25rem; }
+  .chat-header, .chat-messages, .chat-input-form { padding: 1rem; }
 }
 @media (max-width: 600px) {
   .app-header { padding: 0.75rem 1rem; }
@@ -592,5 +657,15 @@ html[data-theme='dark'] .score-value.high { color: var(--color-success); }
   .home-button-header svg { width: 20px; height: 20px; }
   .auth-form-panel { padding: 1.5rem; }
   .dashboard-metrics { grid-template-columns: 1fr; }
-  .home-tab-nav { flex-wrap: wrap; justify-content: center; margin: 0; }
+  
+  .home-tab-nav { 
+    margin: 0; 
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -ms-overflow-style: none; /* IE and Edge */
+    scrollbar-width: none; /* Firefox */
+    padding-bottom: 0.5rem; /* Add some space if scrollbar is visible */
+  }
+  .home-tab-nav::-webkit-scrollbar { display: none; } /* Chrome, Safari and Opera */
+  .home-tab-nav .tab-nav-button { flex-shrink: 0; }
 }

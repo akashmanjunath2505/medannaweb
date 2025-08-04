@@ -49,6 +49,7 @@ export interface DiagnosticCase {
         name: string;
         age: number;
         gender: 'Male' | 'Female' | 'Other';
+        ethnicity: 'Asian' | 'Black' | 'Caucasian' | 'Hispanic' | 'Middle Eastern' | 'South Asian' | 'Other';
     };
     tags: CaseTags;
     chiefComplaint: string;
@@ -70,24 +71,17 @@ export interface GenerationFilters {
 
 // --- GEMINI API SERVICE ---
 
-let ai: GoogleGenAI;
-
 function getAi(): GoogleGenAI {
-    if (ai) {
-        return ai;
-    }
-
-    // Use env variable if available, otherwise fallback to hardcoded key
-    const apiKey = (typeof process !== 'undefined' && process.env && process.env.GEMINI_API_KEY)
-        ? process.env.GEMINI_API_KEY
-        : "AIzaSyCwhzGqRTqLUXVJXwzVupW-BDUNJEM3Ak0";
+    // As per the platform's execution environment, we can expect process.env.API_KEY to be available.
+    const apiKey = process.env.API_KEY;
 
     if (!apiKey) {
-        throw new Error("Gemini API key not found. Please ensure the GEMINI_API_KEY environment variable is set.");
+        // Throw a specific error if the API key is not configured.
+        throw new Error("Gemini API key not found. Please ensure the API_KEY environment variable is set.");
     }
     
-    ai = new GoogleGenAI({ apiKey });
-    return ai;
+    // Create a new instance for each call to ensure statelessness.
+    return new GoogleGenAI({ apiKey });
 }
 
 const caseSchema = {
@@ -95,8 +89,13 @@ const caseSchema = {
     properties: {
         title: { type: Type.STRING, description: "A short, descriptive title for the case (e.g., 'An Elderly Man with Cough and Fever')." },
         patientProfile: {
-            type: Type.OBJECT, properties: { name: { type: Type.STRING }, age: { type: Type.INTEGER }, gender: { type: Type.STRING, enum: ["Male", "Female", "Other"] } },
-            required: ["name", "age", "gender"],
+            type: Type.OBJECT, properties: {
+                name: { type: Type.STRING },
+                age: { type: Type.INTEGER },
+                gender: { type: Type.STRING, enum: ["Male", "Female", "Other"] },
+                ethnicity: { type: Type.STRING, enum: ['Asian', 'Black', 'Caucasian', 'Hispanic', 'Middle Eastern', 'South Asian', 'Other'] }
+            },
+            required: ["name", "age", "gender", "ethnicity"],
         },
         tags: {
             type: Type.OBJECT,
@@ -142,6 +141,7 @@ export async function generateCase(filters: GenerationFilters): Promise<Diagnost
         **Case Constraints:**
         - The case MUST be suitable for the **${trainingPhase}** training phase.
         - The case's primary specialty MUST be one of the following: ${specialties && specialties.length > 0 ? specialties.join(', ') : 'any common medical specialty'}.
+        - The patient's ethnicity MUST be chosen from: Asian, Black, Caucasian, Hispanic, Middle Eastern, South Asian, Other.
     `;
 
     if (epas && epas.length > 0) {
@@ -175,7 +175,7 @@ export async function generateCase(filters: GenerationFilters): Promise<Diagnost
     try {
         const jsonText = response.text.trim();
         const parsedCase = JSON.parse(jsonText) as DiagnosticCase;
-        if (!parsedCase.patientProfile || parsedCase.potentialDiagnoses.filter(d => d.isCorrect).length !== 1 || !parsedCase.mcqs || parsedCase.mcqs.length < 1 || !parsedCase.tags || !parsedCase.tags.curriculum) {
+        if (!parsedCase.patientProfile || !parsedCase.patientProfile.ethnicity || parsedCase.potentialDiagnoses.filter(d => d.isCorrect).length !== 1 || !parsedCase.mcqs || parsedCase.mcqs.length < 1 || !parsedCase.tags || !parsedCase.tags.curriculum) {
              throw new Error("The patient case data is malformed or invalid.");
         }
         return parsedCase;
@@ -183,6 +183,39 @@ export async function generateCase(filters: GenerationFilters): Promise<Diagnost
         console.error("Failed to parse or validate generated case:", response.text, e);
         throw new Error(`The AI returned an invalid data structure for the patient. Please try again.`);
     }
+}
+
+export async function pickSpecialtyForCase(trainingPhase: TrainingPhase): Promise<Specialty> {
+    const aiInstance = getAi();
+    const specialtiesList: Specialty[] = ['Internal Medicine', 'Pediatrics', 'Surgery', 'Obstetrics & Gynecology', 'Psychiatry', 'Cardiology', 'Neurology', 'Dermatology', 'Emergency Medicine'];
+
+    const prompt = `
+        A medical student in the "${trainingPhase}" training phase needs a new case.
+        Pick one single medical specialty from the following list that is appropriate for their level:
+        ${specialtiesList.join(', ')}
+
+        Respond with ONLY the name of the specialty. For example: "Cardiology"
+    `;
+
+    try {
+        const response = await aiInstance.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: prompt
+        });
+
+        const specialty = response.text.trim();
+
+        // Basic validation to ensure the model returned a valid specialty from our list
+        if (specialtiesList.includes(specialty as Specialty)) {
+            return specialty as Specialty;
+        }
+    } catch (error) {
+        console.error("Failed to pick a specialty, will fallback.", error);
+    }
+    
+    // Fallback if the model returns something weird or fails
+    console.warn("AI specialty picking failed or returned invalid response. Falling back to 'Internal Medicine'.");
+    return 'Internal Medicine'; 
 }
 
 
