@@ -29,6 +29,19 @@ export interface CaseLog {
     created_at: string;
 }
 
+export type NotificationType = 'achievement' | 'reminder' | 'new_feature' | 'system_message' | 'leaderboard';
+
+export interface Notification {
+  id: number;
+  user_id: string;
+  title: string;
+  message: string;
+  type: NotificationType;
+  link: string | null;
+  is_read: boolean;
+  created_at: string;
+}
+
 // --- DATABASE SCHEMA ---
 // This Database type definition has been corrected to resolve type inference issues.
 export type Database = {
@@ -69,6 +82,38 @@ export type Database = {
         Update: {
           score?: number;
           user_id?: string;
+        };
+      };
+      notifications: {
+        Row: {
+          id: number;
+          user_id: string;
+          title: string;
+          message: string;
+          type: 'achievement' | 'reminder' | 'new_feature' | 'system_message' | 'leaderboard';
+          link: string | null;
+          is_read: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: number;
+          user_id: string;
+          title: string;
+          message: string;
+          type?: 'achievement' | 'reminder' | 'new_feature' | 'system_message' | 'leaderboard';
+          link?: string | null;
+          is_read?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          id?: number;
+          user_id?: string;
+          title?: string;
+          message?: string;
+          type?: 'achievement' | 'reminder' | 'new_feature' | 'system_message' | 'leaderboard';
+          link?: string | null;
+          is_read?: boolean;
+          created_at?: string;
         };
       };
       profiles: {
@@ -136,7 +181,7 @@ export type Database = {
       [_ in never]: never;
     };
     Enums: {
-      [_ in never]: never;
+      notification_type: 'achievement' | 'reminder' | 'new_feature' | 'system_message' | 'leaderboard';
     };
     CompositeTypes: {
       [_ in never]: never;
@@ -231,6 +276,47 @@ export const getUserScore = async (userId: string): Promise<number> => {
     }
 
     return data?.score ?? 0;
+};
+
+// --- NOTIFICATION FUNCTIONS ---
+export const getNotifications = async (userId: string): Promise<Notification[]> => {
+    const { data, error } = await supabase
+        .from('notifications')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(50); // Limit to last 50 notifications for performance
+    if (error) {
+        console.error('Error fetching notifications:', error);
+        return [];
+    }
+    return (data as Notification[]) || [];
+};
+
+export const markNotificationAsRead = async (notificationId: number, userId: string): Promise<boolean> => {
+    const { error } = await supabase
+        .from('notifications')
+        .update({ is_read: true })
+        .eq('id', notificationId)
+        .eq('user_id', userId); // Ensure user can only update their own
+    if (error) {
+        console.error('Error marking notification as read:', error);
+        return false;
+    }
+    return true;
+};
+
+export const markAllNotificationsAsRead = async (userId: string): Promise<boolean> => {
+    const { error } = await supabase
+        .from('notifications')
+        .update({ is_read: true })
+        .eq('user_id', userId)
+        .eq('is_read', false);
+    if (error) {
+        console.error('Error marking all notifications as read:', error);
+        return false;
+    }
+    return true;
 };
 
 // --- CASE & PROGRESS FUNCTIONS ---
@@ -338,12 +424,22 @@ export const logCaseCompletion = async (
             score: currentScore + caseResult.score
         };
 
+        // Prepare notification
+        const notificationInsert: Database['public']['Tables']['notifications']['Insert'] = {
+            user_id: userId,
+            title: `Case Completed!`,
+            message: `You earned ${caseResult.score} points for "${caseResult.case_title}".`,
+            type: 'achievement',
+            link: '#activity'
+        };
+
         // --- 3. EXECUTE all writes ---
         const writes = await Promise.all([
             supabase.from('case_logs').insert(caseLogInsert),
             supabase.from('progress').upsert(progressUpsert, { onConflict: 'user_id' }),
             supabase.from('streaks').upsert(streakUpsert, { onConflict: 'user_id' }),
             supabase.from('leaderboard').upsert(leaderboardUpsert, { onConflict: 'user_id' }),
+            supabase.from('notifications').insert(notificationInsert),
         ]);
 
         // Check for errors in any of the write operations

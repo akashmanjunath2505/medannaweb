@@ -5,7 +5,7 @@
 import React, { useState, useEffect, useCallback, useRef, StrictMode, ReactNode, createContext, useContext, useMemo } from 'react';
 import { createRoot } from 'react-dom/client';
 import { generateCase, createChatForCase, DiagnosticCase, MCQ, generateSoapNoteForCase, generateHint, CaseTags, GenerationFilters, Chat, pickSpecialtyForCase } from './services/geminiService';
-import { supabase, signIn, signUp, signOut, getUserProfile, updateUserProfile, getCaseLogs, logCaseCompletion, getLeaderboard, getStreak, Profile, Streak, CaseLog, getUserScore } from './services/supabaseService';
+import { supabase, signIn, signUp, signOut, getUserProfile, updateUserProfile, getCaseLogs, logCaseCompletion as supabaseLogCaseCompletion, getLeaderboard, getStreak, Profile, Streak, CaseLog, getUserScore, getNotifications, markNotificationAsRead as supabaseMarkNotificationAsRead, markAllNotificationsAsRead as supabaseMarkAllNotificationsAsRead, Notification, NotificationType } from './services/supabaseService';
 import { Session, User } from '@supabase/supabase-js';
 
 
@@ -162,6 +162,9 @@ const IconFlame = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" heigh
 const IconCheckCircle = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>;
 const IconTrophy = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>;
 const IconFileText = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>;
+const IconBell = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>;
+const IconAward = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 17 17 23 15.79 13.88"/></svg>;
+const IconMail = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>;
 
 
 // --- REACT CONTEXT ---
@@ -183,6 +186,8 @@ interface AppContextType {
     // App State
     page: Page;
     setPage: (page: Page) => void;
+    homeTab: HomeTab;
+    setHomeTab: (tab: HomeTab) => void;
     theme: Theme;
     toggleTheme: () => void;
     isMobile: boolean;
@@ -212,6 +217,12 @@ interface AppContextType {
 
     // Patient Video
     patientVideos: { idle: string | null; talking: string | null };
+
+    // Notifications
+    notifications: Notification[];
+    unreadCount: number;
+    markNotificationAsRead: (notificationId: number) => Promise<void>;
+    markAllNotificationsAsRead: () => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | null>(null);
@@ -255,6 +266,24 @@ const parseVideoFilename = (filename: string): ParsedVideo | null => {
     return { file: filename, state, gender, min_age, max_age };
 };
 
+const timeAgo = (isoDate: string): string => {
+    const date = new Date(isoDate);
+    const now = new Date();
+    const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+
+    let interval = seconds / 31536000;
+    if (interval > 1) return `${Math.floor(interval)}y ago`;
+    interval = seconds / 2592000;
+    if (interval > 1) return `${Math.floor(interval)}mo ago`;
+    interval = seconds / 86400;
+    if (interval > 1) return `${Math.floor(interval)}d ago`;
+    interval = seconds / 3600;
+    if (interval > 1) return `${Math.floor(interval)}h ago`;
+    interval = seconds / 60;
+    if (interval > 1) return `${Math.floor(interval)}m ago`;
+    return `${Math.floor(seconds)}s ago`;
+};
+
 
 const AppContextProvider = ({ children }: { children: ReactNode }) => {
     // Auth & Profile State
@@ -269,6 +298,7 @@ const AppContextProvider = ({ children }: { children: ReactNode }) => {
 
     // App State
     const [page, setPage] = useState<Page>('home');
+    const [homeTab, setHomeTab] = useState<HomeTab>('new-case');
     const [theme, setTheme] = useState<Theme>('light');
     const [isMobile, setIsMobile] = useState(window.innerWidth <= 800);
     
@@ -293,15 +323,20 @@ const AppContextProvider = ({ children }: { children: ReactNode }) => {
     const [patientVideos, setPatientVideos] = useState<{ idle: string | null; talking: string | null }>({ idle: null, talking: null });
     const videoData = useMemo(() => VIDEO_FILENAMES.map(parseVideoFilename).filter(Boolean) as ParsedVideo[], []);
 
+    // Notification State
+    const [notifications, setNotifications] = useState<Notification[]>([]);
+    const [unreadCount, setUnreadCount] = useState(0);
+
     const fetchAllUserData = async (user: User) => {
         try {
             const userId = user.id;
-            const [profileData, streakData, logsData, leaderboardData, scoreData] = await Promise.all([
+            const [profileData, streakData, logsData, leaderboardData, scoreData, notificationsData] = await Promise.all([
                 getUserProfile(userId),
                 getStreak(userId),
                 getCaseLogs(userId),
                 getLeaderboard(),
                 getUserScore(userId),
+                getNotifications(userId),
             ]);
 
             if (profileData) {
@@ -318,6 +353,8 @@ const AppContextProvider = ({ children }: { children: ReactNode }) => {
             setCaseLogs(logsData);
             setLeaderboard(leaderboardData);
             setScore(scoreData);
+            setNotifications(notificationsData);
+            setUnreadCount(notificationsData.filter(n => !n.is_read).length);
         } catch (error) {
             console.error("Failed to fetch user data", error);
             setAuthError("Could not load your profile data.");
@@ -356,6 +393,8 @@ const AppContextProvider = ({ children }: { children: ReactNode }) => {
                 setScore(null);
                 setCaseLogs([]);
                 setLeaderboard([]);
+                setNotifications([]);
+                setUnreadCount(0);
             }
             
             // Once we have determined the auth state, we can hide the anitial loader.
@@ -413,11 +452,42 @@ const AppContextProvider = ({ children }: { children: ReactNode }) => {
     const logCompletedCase = async (caseResult: CaseResultPayload) => {
         if (!session?.user) return;
         try {
-            await logCaseCompletion(session.user.id, caseResult);
+            await supabaseLogCaseCompletion(session.user.id, caseResult);
             // Refetch data to update UI
             await fetchAllUserData(session.user);
         } catch (error) {
             console.error("Failed to log case", error);
+        }
+    };
+
+    const markNotificationAsRead = async (notificationId: number) => {
+        if (!session?.user) return;
+        // Optimistically update UI
+        const originalNotifications = notifications;
+        const originalCount = unreadCount;
+        setNotifications(prev => prev.map(n => n.id === notificationId ? { ...n, is_read: true } : n));
+        setUnreadCount(prev => Math.max(0, prev - 1));
+
+        const success = await supabaseMarkNotificationAsRead(notificationId, session.user.id);
+        if (!success) {
+            // Revert on failure
+            setNotifications(originalNotifications);
+            setUnreadCount(originalCount);
+        }
+    };
+    
+    const markAllNotificationsAsRead = async () => {
+        if (!session?.user || unreadCount === 0) return;
+        // Optimistically update UI
+        const originalNotifications = notifications;
+        setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+        setUnreadCount(0);
+
+        const success = await supabaseMarkAllNotificationsAsRead(session.user.id);
+        if (!success) {
+            // Revert on failure
+            setNotifications(originalNotifications);
+            setUnreadCount(originalNotifications.filter(n => !n.is_read).length);
         }
     };
 
@@ -572,17 +642,97 @@ const AppContextProvider = ({ children }: { children: ReactNode }) => {
 
     const value = {
         session, profile, isAuthLoading, authError, streak, score, caseLogs, leaderboard, setProfile, handleSignOut, updateUserTrainingPhase, logCompletedCase,
-        page, setPage, theme, toggleTheme, isMobile,
+        page, setPage, homeTab, setHomeTab, theme, toggleTheme, isMobile,
         isGenerating, generationError, generationFilters, currentCase, handleStartNewCase, handleGenerateAndStart, handleRegenerateCase,
         soapNote, isGeneratingSoapNote, soapNoteError, handleGenerateSoapNote,
         hint, hintCount, isGeneratingHint, hintError, handleGenerateHint, clearHint,
-        patientVideos
+        patientVideos,
+        notifications, unreadCount, markNotificationAsRead, markAllNotificationsAsRead
     };
 
     return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 };
 
 // --- UI COMPONENTS ---
+
+const NotificationIcon = ({ type }: { type: NotificationType }) => {
+    switch (type) {
+        case 'achievement': return <IconAward />;
+        case 'leaderboard': return <IconTrophy />;
+        case 'new_feature': return <IconLightbulb />;
+        default: return <IconMail />;
+    }
+};
+
+const NotificationMenu = () => {
+    const { 
+        notifications, unreadCount, markNotificationAsRead, markAllNotificationsAsRead, 
+        setPage, setHomeTab 
+    } = useAppContext();
+    const [isOpen, setIsOpen] = useState(false);
+    const menuRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    const handleNotificationClick = (notification: Notification) => {
+        if (!notification.is_read) {
+            markNotificationAsRead(notification.id);
+        }
+        
+        if (notification.link) {
+            if (notification.link.startsWith('#')) {
+                const tab = notification.link.substring(1) as HomeTab;
+                setPage('home');
+                setHomeTab(tab);
+                setIsOpen(false);
+            } else {
+                window.open(notification.link, '_blank');
+            }
+        }
+    };
+    
+    return (
+        <div className="notification-menu" ref={menuRef}>
+            <button className="icon-button notification-bell-button" onClick={() => setIsOpen(!isOpen)} onKeyDown={(e) => e.key === 'Enter' && setIsOpen(!isOpen)} aria-haspopup="true" aria-expanded={isOpen} aria-label={`${unreadCount} unread notifications`}>
+                <IconBell />
+                {unreadCount > 0 && <span className="notification-badge">{unreadCount > 9 ? '9+' : unreadCount}</span>}
+            </button>
+            <div className={`notification-dropdown ${isOpen ? 'open' : ''}`} role="menu">
+                <div className="dropdown-header">
+                    <h4>Notifications</h4>
+                    {unreadCount > 0 && <button className="mark-all-read" onClick={markAllNotificationsAsRead}>Mark all as read</button>}
+                </div>
+                <div className="notification-list">
+                    {notifications.length > 0 ? (
+                        notifications.map(n => (
+                            <div key={n.id} className={`notification-item ${!n.is_read ? 'unread' : ''}`} onClick={() => handleNotificationClick(n)} role="menuitem" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && handleNotificationClick(n)}>
+                                <div className="notification-item-icon">
+                                    <NotificationIcon type={n.type} />
+                                </div>
+                                <div className="notification-item-content">
+                                    <strong>{n.title}</strong>
+                                    <p>{n.message}</p>
+                                    <span>{timeAgo(n.created_at)}</span>
+                                </div>
+                                {!n.is_read && <div className="unread-dot"></div>}
+                            </div>
+                        ))
+                    ) : (
+                        <div className="notification-empty">You have no new notifications.</div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};
 
 const ProfileMenu = () => {
     const { profile, theme, toggleTheme, handleSignOut } = useAppContext();
@@ -646,6 +796,7 @@ const AppHeader = () => {
             </div>
             <div className="app-header-right">
                 {session && <button className="button button-outline home-button-header" onClick={() => setPage('home')}><IconHome/> <span>Home</span></button>}
+                {session && <NotificationMenu />}
                 {session ? <ProfileMenu /> : <div/>}
             </div>
         </header>
@@ -660,6 +811,15 @@ const AuthPage = () => {
     const [fullName, setFullName] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [showSignupSuccess, setShowSignupSuccess] = useState(false);
+
+    const handleCloseSignupModal = () => {
+        setShowSignupSuccess(false);
+        setIsLogin(true); // Switch to login view
+        setEmail('');
+        setPassword('');
+        setFullName('');
+    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -675,6 +835,7 @@ const AuthPage = () => {
                     return;
                 }
                 await signUp({ email, password, fullName });
+                setShowSignupSuccess(true);
             }
         } catch (err: any) {
             setError(err.message || 'An unexpected error occurred.');
@@ -685,6 +846,17 @@ const AuthPage = () => {
 
     return (
         <main className="app-container auth-page-wrapper">
+            {showSignupSuccess && (
+                <ExplanationModal
+                    title="Check Your Email"
+                    icon={<IconMail />}
+                    iconType="info"
+                    showOkButton={true}
+                    onClose={handleCloseSignupModal}
+                >
+                    A confirmation link has been sent to your email address. Please check your inbox and click the link to verify your account.
+                </ExplanationModal>
+            )}
             <div className="auth-container">
                 <div className="auth-decoration-panel">
                     <div className="auth-logo">
@@ -1068,8 +1240,7 @@ const DashboardMetrics = () => {
 }
 
 const HomePage = () => {
-    const { profile } = useAppContext();
-    const [activeTab, setActiveTab] = useState<HomeTab>('new-case');
+    const { profile, homeTab, setHomeTab } = useAppContext();
 
     return (
         <main className="app-container home-page">
@@ -1082,21 +1253,21 @@ const HomePage = () => {
             
             <div className="home-content-wrapper">
                 <div className="home-tab-nav">
-                    <button className={`tab-nav-button ${activeTab === 'new-case' ? 'active' : ''}`} onClick={() => setActiveTab('new-case')}>
+                    <button className={`tab-nav-button ${homeTab === 'new-case' ? 'active' : ''}`} onClick={() => setHomeTab('new-case')}>
                         <IconStethoscope/> New Case
                     </button>
-                    <button className={`tab-nav-button ${activeTab === 'activity' ? 'active' : ''}`} onClick={() => setActiveTab('activity')}>
+                    <button id="activity" className={`tab-nav-button ${homeTab === 'activity' ? 'active' : ''}`} onClick={() => setHomeTab('activity')}>
                         <IconFileText/> My Activity
                     </button>
-                     <button className={`tab-nav-button ${activeTab === 'leaderboard' ? 'active' : ''}`} onClick={() => setActiveTab('leaderboard')}>
+                     <button id="leaderboard" className={`tab-nav-button ${homeTab === 'leaderboard' ? 'active' : ''}`} onClick={() => setHomeTab('leaderboard')}>
                         <IconTrophy/> Leaderboard
                     </button>
                 </div>
                 
                 <div className="home-content">
-                    {activeTab === 'new-case' && <NewCaseTab />}
-                    {activeTab === 'activity' && <ActivityLogTab />}
-                    {activeTab === 'leaderboard' && <LeaderboardTab />}
+                    {homeTab === 'new-case' && <NewCaseTab />}
+                    {homeTab === 'activity' && <ActivityLogTab />}
+                    {homeTab === 'leaderboard' && <LeaderboardTab />}
                 </div>
             </div>
         </main>
@@ -1163,7 +1334,7 @@ const GeneratingCaseSplash = () => {
     );
 };
 
-const ExplanationModal = ({ title, children, onClose }: { title: string, children: ReactNode, onClose: () => void }) => {
+const ExplanationModal = ({ title, children, icon, iconType = 'info', onClose, showOkButton = false }: { title: string, children: ReactNode, icon?: ReactNode, iconType?: 'success' | 'info' | 'danger', onClose: () => void, showOkButton?: boolean }) => {
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key === 'Escape') {
@@ -1186,8 +1357,14 @@ const ExplanationModal = ({ title, children, onClose }: { title: string, childre
                     </button>
                 </div>
                 <div className="modal-body">
-                    <p style={{ whiteSpace: 'pre-wrap' }}>{children}</p>
+                    {icon && <div className={`modal-icon-wrapper modal-icon-${iconType}`}>{icon}</div>}
+                    <p style={{ whiteSpace: 'pre-wrap', textAlign: icon ? 'center' : 'left' }}>{children}</p>
                 </div>
+                {showOkButton && (
+                    <div className="modal-footer">
+                        <button className="button button-primary" onClick={onClose}>OK</button>
+                    </div>
+                )}
             </div>
         </div>
     );
