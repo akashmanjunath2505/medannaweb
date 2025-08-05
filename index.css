@@ -255,19 +255,20 @@ html[data-theme='dark'] .alert.alert-error { border-color: var(--color-danger); 
 /* Simulation Page */
 .simulation-page {
   display: grid;
-  flex-direction: row;
-  grid-template-columns: minmax(0, 3fr) 480px minmax(0, 3fr);
-  gap: 2rem;
+  grid-template-columns: 1fr minmax(400px, 480px) 1fr;
+  gap: 1.5rem;
   align-items: flex-start;
-  height: calc(100vh - 65px - 4rem);
+  height: calc(100vh - 65px - 3rem); /* Adjusted for 1.5rem padding */
   max-width: 1800px;
+  padding: 1.5rem; /* Override app-container padding */
 }
+
 .central-panel { display: flex; flex-direction: column; height: 100%; }
 .right-panel {
   display: flex;
   flex-direction: column;
   height: 100%;
-  max-height: calc(100vh - 65px - 4rem);
+  max-height: calc(100vh - 65px - 3rem); /* Adjusted for 1.5rem padding */
 }
 .right-panel > .panel { flex-grow: 1; min-height: 0; }
 
@@ -284,7 +285,7 @@ html[data-theme='dark'] .alert.alert-error { border-color: var(--color-danger); 
 .panel-header { padding: 1.5rem; border-bottom: 1px solid var(--color-border); flex-shrink: 0; }
 .panel-header h2 { color: var(--color-primary); }
 .panel-content { padding: 0 1.5rem 1.5rem; overflow-y: auto; flex-grow: 1; }
-.case-info-panel { height: 100%; max-height: calc(100vh - 65px - 4rem); }
+.case-info-panel { height: 100%; max-height: calc(100vh - 65px - 3rem); } /* Adjusted for 1.5rem padding */
 .case-info-panel .panel-content { padding-top: 1rem; }
 .actions-panel .panel-content { padding-top: 1.5rem; }
 
@@ -309,7 +310,7 @@ html[data-theme='dark'] .alert.alert-error { border-color: var(--color-danger); 
     width: 100%;
     height: 100%;
     object-fit: cover;
-    object-position: 50% 40%; /* Shifts video up to crop the bottom by about 10% */
+    object-position: center 30%; /* Prioritize showing head and shoulders */
     visibility: hidden;
     opacity: 0;
     transition: opacity 0.3s ease-in-out;
@@ -346,11 +347,23 @@ html[data-theme='dark'] .alert.alert-error { border-color: var(--color-danger); 
 .patient-icon svg { width: 60px; height: 60px; }
 
 .medanna-logo-badge {
-    height: 1.5rem; /* Balanced with patient name font size */
-    width: auto;
-    border-radius: 6px;
-    object-fit: cover;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: #000000;
+    color: #ffffff;
+    padding: 0.75rem 1.5rem;
+    font-family: var(--font-heading);
+    font-weight: 800;
+    font-size: 1.2rem;
+    flex-shrink: 0;
+    border-bottom-right-radius: var(--border-radius);
 }
+
+.medanna-logo-badge .medanna-anna {
+    color: var(--color-primary);
+}
+
 
 /* --- FIXED PATIENT NAME BAR --- */
 .patient-overlay-content {
@@ -359,27 +372,21 @@ html[data-theme='dark'] .alert.alert-error { border-color: var(--color-danger); 
     right: 0;
     bottom: 0;
     display: flex;
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between; /* Pushes info to left, logo to right */
-    gap: 1rem;
+    align-items: stretch; /* Make children have same height */
     z-index: 2;
-    padding: 0.75rem 1rem;
-    background-color: rgba(17, 17, 17, 0.75);
-    backdrop-filter: blur(5px);
-    -webkit-backdrop-filter: blur(5px);
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
-    border-bottom-left-radius: var(--border-radius);
-    border-bottom-right-radius: var(--border-radius);
     width: 100%;
-    min-height: 56px;
-    transition: all 0.3s ease;
 }
 
 .patient-info {
     display: flex;
     align-items: center;
     gap: 0.75rem;
+    flex-grow: 1; /* Take up remaining space */
+    background-color: rgba(30, 30, 30, 0.75);
+    backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px);
+    padding: 0.75rem 1.5rem;
+    border-bottom-left-radius: var(--border-radius);
 }
 
 .patient-name {
@@ -387,7 +394,7 @@ html[data-theme='dark'] .alert.alert-error { border-color: var(--color-danger); 
     font-size: 1.2rem;
     font-weight: 600;
     color: #fff;
-    text-shadow: 1px 1px 3px rgba(0,0,0,0.9);
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
     line-height: 1.2;
     letter-spacing: 0.02em;
     background: none;
@@ -563,6 +570,90 @@ html[data-theme='dark'] .splash-overlay { background-color: rgba(18, 18, 18, 0.9
 .fun-fact-text.fade-in { opacity: 1; }
 .fun-fact-text.fade-out { opacity: 0; }
 
+/* Explanation Modal */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background-color: rgba(0, 0, 0, 0.65);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    animation: fadeInModal 0.3s ease-out;
+}
+
+@keyframes fadeInModal { from { opacity: 0; } to { opacity: 1; } }
+
+.modal-content {
+    background-color: var(--color-surface);
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow-lg);
+    width: 100%;
+    max-width: 700px;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    animation: slideInModal 0.3s ease-out;
+    overflow: hidden;
+    border: 1px solid var(--color-border);
+}
+
+@keyframes slideInModal {
+    from { transform: translateY(-30px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.25rem 1.5rem;
+    border-bottom: 1px solid var(--color-border);
+    flex-shrink: 0;
+}
+
+.modal-header h2 {
+    font-size: 1.5rem;
+    color: var(--color-primary);
+    margin: 0;
+}
+
+.modal-header .close-button {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    color: var(--color-text-secondary);
+    line-height: 0;
+    opacity: 0.8;
+    transition: all 0.2s ease;
+}
+
+.modal-header .close-button:hover {
+    opacity: 1;
+    color: var(--color-danger);
+    transform: scale(1.1);
+}
+
+.modal-header .close-button svg {
+    width: 28px;
+    height: 28px;
+}
+
+.modal-body {
+    padding: 1.5rem;
+    overflow-y: auto;
+}
+
+.modal-body p {
+    font-size: 1rem;
+    line-height: 1.7;
+    color: var(--color-text-primary);
+}
+
 /* Utility & Helpers */
 .loading-spinner { border-radius: 50%; animation: spin 1s linear infinite; border: 3px solid; border-color: currentColor; border-top-color: transparent; width: 16px; height: 16px; }
 .global-loading-spinner { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 10000; }
@@ -614,8 +705,30 @@ html[data-theme='dark'] .score-value.high { color: var(--color-success); }
 
 /* --- Responsive Design --- */
 @media (max-width: 1200px) {
-  .simulation-page { grid-template-columns: 1fr 1fr; gap: 1.5rem; }
-  .simulation-page .central-panel { display: none; }
+  .simulation-page {
+    grid-template-columns: 1fr minmax(320px, 40vw);
+    grid-template-rows: auto auto;
+    gap: 1.5rem;
+    height: auto;
+  }
+  .case-info-panel {
+    grid-column: 1 / 2;
+    grid-row: 1 / 2;
+  }
+  .central-panel {
+    display: flex;
+    grid-column: 2 / 3;
+    grid-row: 1 / 3;
+    position: sticky;
+    top: calc(65px + 1.5rem);
+    height: calc(100vh - 65px - 3rem);
+  }
+  .right-panel {
+    grid-column: 1 / 2;
+    grid-row: 2 / 3;
+    max-height: none;
+    height: auto;
+  }
 }
 @media (max-width: 1024px) { 
   .generation-section { grid-template-columns: 1fr; padding: 1.5rem; } 
@@ -625,7 +738,7 @@ html[data-theme='dark'] .score-value.high { color: var(--color-success); }
 @media (max-width: 800px) {
   h1 { font-size: 2rem; }
   h2 { font-size: 1.25rem; }
-  .app-container { padding: 1rem; }
+  .app-container:not(.simulation-page) { padding: 1rem; }
   .app-header { padding: 0.75rem 1rem; }
   .home-header h1 { font-size: 1.8rem; }
   .home-tab-nav { margin: 0 1rem; }
@@ -656,10 +769,11 @@ html[data-theme='dark'] .score-value.high { color: var(--color-success); }
     gap: 1.5rem;
   }
   /* New vertical stacking order: 1. Visualizer, 2. Case Info, 3. Interactive Panel */
-  .simulation-page .central-panel {
+  .central-panel {
     order: 1;
     display: flex; /* Ensure it's visible on mobile */
     height: 300px;
+    position: static; /* Unset sticky positioning */
   }
   .case-info-panel {
     order: 2;

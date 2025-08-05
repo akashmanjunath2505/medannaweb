@@ -1163,6 +1163,36 @@ const GeneratingCaseSplash = () => {
     );
 };
 
+const ExplanationModal = ({ title, children, onClose }: { title: string, children: ReactNode, onClose: () => void }) => {
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                onClose();
+            }
+        };
+        document.addEventListener('keydown', handleKeyDown);
+        return () => {
+            document.removeEventListener('keydown', handleKeyDown);
+        };
+    }, [onClose]);
+
+    return (
+        <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                <div className="modal-header">
+                    <h2 id="modal-title">{title}</h2>
+                    <button className="close-button" onClick={onClose} aria-label="Close">
+                        <IconClose />
+                    </button>
+                </div>
+                <div className="modal-body">
+                    <p style={{ whiteSpace: 'pre-wrap' }}>{children}</p>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 
 const AccordionSection = ({ title, children, defaultOpen = false }: { title: string, children: ReactNode, defaultOpen?: boolean }) => {
     const [isOpen, setIsOpen] = useState(defaultOpen);
@@ -1259,7 +1289,7 @@ const DiagnosisPanel = ({
                             );
                         })}
                     </div>
-                    {selectedDiagnosis && <div className="feedback-box alert"><p><strong>Explanation:</strong> {currentCase.correctDiagnosisExplanation}</p></div>}
+                    {/* The explanation is now shown in a modal */}
                 </AccordionSection>
             </div>
         </div>
@@ -1332,7 +1362,7 @@ const QuestionsPanel = ({
                                             );
                                         })}
                                     </div>
-                                    {selectedMcqAnswers[index] !== undefined && <div className="feedback-box alert"><p><strong>Explanation:</strong> {mcq.explanation}</p></div>}
+                                    {/* The explanation is now shown in a modal */}
                                 </div>
                             )) : <p>No clinical questions for this case.</p>}
                         </AccordionSection>
@@ -1368,25 +1398,40 @@ const SimulationPage = () => {
     const [selectedDiagnosis, setSelectedDiagnosis] = useState<string | null>(null);
     const [selectedMcqAnswers, setSelectedMcqAnswers] = useState<Record<number, number>>({});
     const [activeTab, setActiveTab] = useState<ActiveTab>('chat');
+    const [explanationModalContent, setExplanationModalContent] = useState<{ title: string; content: string } | null>(null);
 
     useEffect(() => {
         // Reset state when case changes
         setSelectedDiagnosis(null);
         setSelectedMcqAnswers({});
         setActiveTab('chat');
+        setExplanationModalContent(null);
     }, [currentCase]);
 
     const handleSelectDiagnosis = (diagnosis: string) => {
-        if (!selectedDiagnosis) {
+        if (!selectedDiagnosis && currentCase) {
             setSelectedDiagnosis(diagnosis);
+            setExplanationModalContent({
+                title: "Diagnosis Rationale",
+                content: currentCase.correctDiagnosisExplanation,
+            });
             setActiveTab('questions'); // Auto-switch to questions after diagnosis
         }
     };
 
     const handleSelectMcqAnswer = (mcqIndex: number, optionIndex: number) => {
-        if (selectedMcqAnswers[mcqIndex] === undefined) {
+        if (selectedMcqAnswers[mcqIndex] === undefined && currentCase) {
             setSelectedMcqAnswers(prev => ({ ...prev, [mcqIndex]: optionIndex }));
+            const mcq = currentCase.mcqs[mcqIndex];
+            setExplanationModalContent({
+                title: `Question ${mcqIndex + 1} Explanation`,
+                content: mcq.explanation,
+            });
         }
+    };
+
+    const handleCloseModal = () => {
+        setExplanationModalContent(null);
     };
 
     return (
@@ -1417,6 +1462,14 @@ const SimulationPage = () => {
                     />
                 )}
             </div>
+            {explanationModalContent && (
+                <ExplanationModal 
+                    title={explanationModalContent.title}
+                    onClose={handleCloseModal}
+                >
+                    {explanationModalContent.content}
+                </ExplanationModal>
+            )}
         </main>
     );
 };

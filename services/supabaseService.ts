@@ -14,9 +14,6 @@ export interface Profile {
   training_phase: TrainingPhase | null;
 }
 
-// The profile data as it is stored in the 'profiles' table.
-type DbProfile = Omit<Profile, 'training_phase'>;
-
 export interface Streak {
     user_id: string;
     current_streak: number;
@@ -33,128 +30,119 @@ export interface CaseLog {
 }
 
 // --- DATABASE SCHEMA ---
-// NOTE: The `Relationships` property is explicitly set to an empty array `[]` for each
-// table definition. This is a robust fix for a common issue with `supabase-js` where
-// the presence of complex relationships can cause "Type instantiation is excessively
-// deep" errors in TypeScript. Defining it as an empty array signals to TypeScript
-// that there are no relationships to resolve, fixing the type inference for Supabase client methods.
+// This Database type definition has been corrected to resolve type inference issues.
 export type Database = {
   public: {
     Tables: {
       case_logs: {
         Row: {
-          case_details: string
-          case_title: string
-          created_at: string
-          id: number
-          user_id: string
-        }
+          case_details: string;
+          case_title: string;
+          created_at: string;
+          id: number;
+          user_id: string;
+        };
         Insert: {
-          case_details: string
-          case_title: string
-          created_at?: string
-          id?: number
-          user_id: string
-        }
+          case_details: string;
+          case_title: string;
+          created_at?: string;
+          id?: number;
+          user_id: string;
+        };
         Update: {
-          case_details?: string
-          case_title?: string
-          created_at?: string
-          id?: number
-          user_id?: string
-        }
-        Relationships: []
-      }
+          case_details?: string;
+          case_title?: string;
+          created_at?: string;
+          id?: number;
+          user_id?: string;
+        };
+      };
       leaderboard: {
         Row: {
-          score: number
-          user_id: string
-        }
+          score: number;
+          user_id: string;
+        };
         Insert: {
-          score?: number
-          user_id: string
-        }
+          score?: number;
+          user_id: string;
+        };
         Update: {
-          score?: number
-          user_id?: string
-        }
-        Relationships: []
-      }
+          score?: number;
+          user_id?: string;
+        };
+      };
       profiles: {
         Row: {
-          email: string
-          full_name: string | null
-          id: string
-        }
+          email: string;
+          full_name: string | null;
+          id: string;
+        };
         Insert: {
-          email: string
-          full_name?: string | null
-          id: string
-        }
+          email: string;
+          full_name?: string | null;
+          id: string;
+        };
         Update: {
-          email?: string
-          full_name?: string | null
-          id?: string
-        }
-        Relationships: []
-      }
+          email?: string;
+          full_name?: string | null;
+          id?: string;
+        };
+      };
       progress: {
         Row: {
-          completed: number
-          id: number
-          updated_at: string
-          user_id: string
-        }
+          completed: number;
+          id: number;
+          updated_at: string;
+          user_id: string;
+        };
         Insert: {
-          completed?: number
-          id?: number
-          updated_at?: string
-          user_id: string
-        }
+          completed?: number;
+          id?: number;
+          updated_at?: string;
+          user_id: string;
+        };
         Update: {
-          completed?: number
-          id?: number
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
+          completed?: number;
+          id?: number;
+          updated_at?: string;
+          user_id?: string;
+        };
+      };
       streaks: {
         Row: {
-          current_streak: number
-          last_active_day: string
-          max_streak: number
-          user_id: string
-        }
+          current_streak: number;
+          last_active_day: string;
+          max_streak: number;
+          user_id: string;
+        };
         Insert: {
-          current_streak?: number
-          last_active_day: string
-          max_streak?: number
-          user_id: string
-        }
+          current_streak?: number;
+          last_active_day: string;
+          max_streak?: number;
+          user_id: string;
+        };
         Update: {
-          current_streak?: number
-          last_active_day?: string
-          max_streak?: number
-          user_id?: string
-        }
-        Relationships: []
-      }
-    }
+          current_streak?: number;
+          last_active_day?: string;
+          max_streak?: number;
+          user_id?: string;
+        };
+      };
+    };
     Views: {
-      [_ in never]: never
-    }
+      [_ in never]: never;
+    };
     Functions: {
-      [_ in never]: never
-    }
+      [_ in never]: never;
+    };
     Enums: {
-      [_ in never]: never
-    }
+      [_ in never]: never;
+    };
     CompositeTypes: {
-      [_ in never]: never
-    }
-  }
-}
+      [_ in never]: never;
+    };
+  };
+};
 
 
 // --- SUPABASE CLIENT INITIALIZATION ---
@@ -295,6 +283,10 @@ export const logCaseCompletion = async (
         if (progressResult.error) throw progressResult.error;
         if (leaderboardResult.error) throw leaderboardResult.error;
         
+        const streakData = streakResult.data;
+        const progressData = progressResult.data;
+        const leaderboardData = leaderboardResult.data;
+        
         // --- 2. PREPARE all updates ---
         
         // Prepare Case Log data
@@ -305,7 +297,7 @@ export const logCaseCompletion = async (
         };
 
         // Prepare Progress update data
-        const currentProgress = progressResult.data?.completed || 0;
+        const currentProgress = progressData?.completed || 0;
         const progressUpsert: Database['public']['Tables']['progress']['Insert'] = {
             user_id: userId,
             completed: currentProgress + 1,
@@ -313,19 +305,18 @@ export const logCaseCompletion = async (
         };
         
         // Prepare Streak update data
-        const streak = streakResult.data;
         let newCurrentStreak = 1;
-        let newMaxStreak = streak?.max_streak || 0;
+        let newMaxStreak = streakData?.max_streak || 0;
 
-        if (streak && streak.last_active_day) {
-            const lastActive = new Date(streak.last_active_day);
+        if (streakData && streakData.last_active_day) {
+            const lastActive = new Date(streakData.last_active_day);
             const yesterday = new Date(today);
             yesterday.setDate(today.getDate() - 1);
             
-            if (streak.last_active_day === todayStr) {
-                newCurrentStreak = streak.current_streak; // Already active today, no change
+            if (streakData.last_active_day === todayStr) {
+                newCurrentStreak = streakData.current_streak; // Already active today, no change
             } else if (lastActive.toDateString() === yesterday.toDateString()) {
-                newCurrentStreak = streak.current_streak + 1; // Active yesterday, increment
+                newCurrentStreak = streakData.current_streak + 1; // Active yesterday, increment
             }
             // Otherwise, streak is broken, it's reset to 1 (the default)
         }
@@ -341,7 +332,7 @@ export const logCaseCompletion = async (
         };
 
         // Prepare Leaderboard update data
-        const currentScore = leaderboardResult.data?.score || 0;
+        const currentScore = leaderboardData?.score || 0;
         const leaderboardUpsert: Database['public']['Tables']['leaderboard']['Insert'] = {
             user_id: userId,
             score: currentScore + caseResult.score
