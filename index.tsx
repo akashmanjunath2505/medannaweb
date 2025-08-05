@@ -1428,6 +1428,7 @@ const PatientVisualizer = () => {
     const idleVideoRef = useRef<HTMLVideoElement>(null);
     const talkingVideoRef = useRef<HTMLVideoElement>(null);
 
+    // Effect 1: Attach speech listeners once on component mount.
     useEffect(() => {
         const handleSpeechStart = () => setIsSpeaking(true);
         const handleSpeechEnd = () => setIsSpeaking(false);
@@ -1437,30 +1438,54 @@ const PatientVisualizer = () => {
             window.removeEventListener('speech-start', handleSpeechStart);
             window.removeEventListener('speech-end', handleSpeechEnd);
         };
-    }, []);
+    }, []); // Empty dependency array means this runs only once.
 
+    // Effect 2: Manage seamless video looping.
+    // Re-attaches listeners only if the video sources change.
+    useEffect(() => {
+        const setupLooping = (video: HTMLVideoElement | null) => {
+            if (!video) return;
+            const onEnded = () => {
+                video.currentTime = 0;
+                video.play().catch(e => console.error('Seamless loop failed', e));
+            }
+            video.addEventListener('ended', onEnded);
+            // Cleanup function for this specific video
+            return () => video.removeEventListener('ended', onEnded);
+        }
+
+        const idleCleanup = setupLooping(idleVideoRef.current);
+        const talkingCleanup = setupLooping(talkingVideoRef.current);
+
+        // This is the cleanup for the effect itself
+        return () => {
+            if (idleCleanup) idleCleanup();
+            if (talkingCleanup) talkingCleanup();
+        }
+    }, [patientVideos.idle, patientVideos.talking]);
+
+    // Effect 3: Control which video plays based on `isSpeaking` state.
     useEffect(() => {
         const idleVideo = idleVideoRef.current;
         const talkingVideo = talkingVideoRef.current;
-
         if (!idleVideo || !talkingVideo) return;
 
         if (isSpeaking) {
             idleVideo.pause();
-            talkingVideo.currentTime = 0;
+            talkingVideo.currentTime = 0; // Always start talking from the beginning
             talkingVideo.play().catch(e => console.error("Talking video playback failed:", e));
         } else {
             talkingVideo.pause();
             idleVideo.play().catch(e => console.error("Idle video playback failed:", e));
         }
-    }, [isSpeaking, patientVideos]);
-    
+    }, [isSpeaking]); // Only depends on the speaking state.
+
     if (!currentCase) return null;
 
-    const patientName = currentCase.patientProfile.age < 7 
-        ? `${currentCase.patientProfile.name}'s Mother` 
+    const patientName = currentCase.patientProfile.age < 7
+        ? `${currentCase.patientProfile.name}'s Mother`
         : currentCase.patientProfile.name;
-        
+
     const hasVideos = patientVideos.idle && patientVideos.talking;
 
     return (
@@ -1473,7 +1498,6 @@ const PatientVisualizer = () => {
                         src={patientVideos.idle!}
                         className={`patient-video ${!isSpeaking ? 'visible' : ''}`}
                         autoPlay
-                        loop
                         muted
                         playsInline
                     />
@@ -1484,7 +1508,6 @@ const PatientVisualizer = () => {
                         className={`patient-video ${isSpeaking ? 'visible' : ''}`}
                         muted
                         playsInline
-                        loop
                     />
                 </>
             ) : (
@@ -1495,15 +1518,20 @@ const PatientVisualizer = () => {
                 </div>
             )}
             <div className="patient-overlay-content">
-                <h3 className="patient-name">{patientName}</h3>
-                {isSpeaking && 
-                    <div className="speaking-indicator">
-                        <span className="speaking-indicator-bar"></span>
-                        <span className="speaking-indicator-bar"></span>
-                        <span className="speaking-indicator-bar"></span>
-                        <span className="speaking-indicator-bar"></span>
-                    </div>
-                }
+                <div className="patient-info">
+                    <h3 className="patient-name">{patientName}</h3>
+                    {isSpeaking &&
+                        <div className="speaking-indicator">
+                            <span className="speaking-indicator-bar"></span>
+                            <span className="speaking-indicator-bar"></span>
+                            <span className="speaking-indicator-bar"></span>
+                            <span className="speaking-indicator-bar"></span>
+                        </div>
+                    }
+                </div>
+                <div className="medanna-logo-badge">
+                    <span className="medanna-med">Med</span><span className="medanna-anna">Anna</span>
+                </div>
             </div>
         </div>
     );

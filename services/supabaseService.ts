@@ -33,6 +33,11 @@ export interface CaseLog {
 }
 
 // --- DATABASE SCHEMA ---
+// NOTE: The `Relationships` property is explicitly set to an empty array `[]` for each
+// table definition. This is a robust fix for a common issue with `supabase-js` where
+// the presence of complex relationships can cause "Type instantiation is excessively
+// deep" errors in TypeScript. Defining it as an empty array signals to TypeScript
+// that there are no relationships to resolve, fixing the type inference for Supabase client methods.
 export type Database = {
   public: {
     Tables: {
@@ -58,14 +63,7 @@ export type Database = {
           id?: number
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "case_logs_user_id_fkey"
-            columns: ["user_id"]
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       leaderboard: {
         Row: {
@@ -80,15 +78,7 @@ export type Database = {
           score?: number
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "leaderboard_user_id_fkey"
-            columns: ["user_id"]
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-            isOneToOne: true
-          },
-        ]
+        Relationships: []
       }
       profiles: {
         Row: {
@@ -106,11 +96,7 @@ export type Database = {
           full_name?: string | null
           id?: string
         }
-        Relationships: [
-          // This relationship to the built-in 'users' table was causing a
-          // 'Type instantiation is excessively deep and possibly infinite' error.
-          // Removing it resolves the issue, as the app logic does not rely on a typed join here.
-        ]
+        Relationships: []
       }
       progress: {
         Row: {
@@ -131,15 +117,7 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "progress_user_id_fkey"
-            columns: ["user_id"]
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-            isOneToOne: true
-          },
-        ]
+        Relationships: []
       }
       streaks: {
         Row: {
@@ -160,28 +138,20 @@ export type Database = {
           max_streak?: number
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "streaks_user_id_fkey"
-            columns: ["user_id"]
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-            isOneToOne: true
-          },
-        ]
+        Relationships: []
       }
     }
     Views: {
-      [key: string]: never
+      [_ in never]: never
     }
     Functions: {
-      [key: string]: never
+      [_ in never]: never
     }
     Enums: {
-      [key: string]: never
+      [_ in never]: never
     }
     CompositeTypes: {
-      [key: string]: never
+      [_ in never]: never
     }
   }
 }
@@ -260,7 +230,7 @@ export const updateUserProfile = async (userId: string, updates: Database['publi
     return { ...data, training_phase: training_phase as TrainingPhase | null };
 };
 
-export const getUserScore = async (userId: string): Promise<number | null> => {
+export const getUserScore = async (userId: string): Promise<number> => {
     const { data, error } = await supabase
         .from('leaderboard')
         .select('score')
@@ -415,31 +385,57 @@ const botUsers = [
 ];
 
 export const getLeaderboard = async (): Promise<any[]> => {
-    const { data: realUsers, error } = await supabase
+    // 1. Fetch leaderboard scores
+    const { data: leaderboardData, error: leaderboardError } = await supabase
         .from('leaderboard')
-        .select(`
-            user_id,
-            score,
-            profiles (
-                full_name
-            )
-        `)
+        .select('user_id, score')
         .order('score', { ascending: false })
         .limit(20);
-    
-    if (error) {
-        console.error('Error fetching leaderboard:', error);
+
+    if (leaderboardError) {
+        console.error('Error fetching leaderboard:', leaderboardError);
         return botUsers; // Return bots if fetching fails
     }
-    
-    const users = realUsers || [];
 
-    // Filter out any real users that might be duplicated by bots
-    const realUserIds = new Set(users.map(u => u.user_id));
+    const realUsers = leaderboardData || [];
+    
+    // Combine with bots even if no real users, to show a populated leaderboard
+    if (realUsers.length === 0) {
+        return botUsers.sort((a, b) => b.score - a.score);
+    }
+    
+    const userIds = realUsers.map(u => u.user_id);
+
+    // 2. Fetch profiles for these users
+    const { data: profilesData, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, full_name')
+        .in('id', userIds);
+
+    let realUsersWithProfiles;
+
+    if (profilesError) {
+        console.error('Error fetching profiles for leaderboard:', profilesError);
+        // Continue with user_ids but no names
+        realUsersWithProfiles = realUsers.map(u => ({
+            ...u,
+            profiles: { full_name: 'Anonymous' },
+        }));
+    } else {
+        const profilesMap = new Map(profilesData.map(p => [p.id, p.full_name]));
+        // 3. Combine leaderboard data with profile data
+        realUsersWithProfiles = realUsers.map(u => ({
+            ...u,
+            profiles: { full_name: profilesMap.get(u.user_id) || 'Anonymous' }
+        }));
+    }
+
+    // 4. Filter out any real users that might be duplicated by bots and combine
+    const realUserIds = new Set(realUsers.map(u => u.user_id));
     const filteredBots = botUsers.filter(b => !realUserIds.has(b.user_id));
 
-    const combined = [...users, ...filteredBots];
+    const combined = [...realUsersWithProfiles, ...filteredBots];
 
-    // Sort by score descending and take the top 20
+    // 5. Sort by score descending and take the top 20
     return combined.sort((a, b) => (b.score || 0) - (a.score || 0)).slice(0, 20);
 }

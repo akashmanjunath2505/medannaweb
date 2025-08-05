@@ -309,8 +309,7 @@ html[data-theme='dark'] .alert.alert-error { border-color: var(--color-danger); 
     width: 100%;
     height: 100%;
     object-fit: cover;
-    object-position: 50% 45%; /* Shifts video up slightly to crop the bottom */
-    border-radius: var(--border-radius);
+    object-position: 50% 40%; /* Shifts video up to crop the bottom by about 10% */
     visibility: hidden;
     opacity: 0;
     transition: opacity 0.3s ease-in-out;
@@ -345,51 +344,82 @@ html[data-theme='dark'] .alert.alert-error { border-color: var(--color-danger); 
     box-shadow: 0 0 20px 0 var(--color-primary-light);
 }
 .patient-icon svg { width: 60px; height: 60px; }
+
+.medanna-logo-badge {
+    height: 1.5rem; /* Balanced with patient name font size */
+    width: auto;
+    border-radius: 6px;
+    object-fit: cover;
+}
+
+/* --- FIXED PATIENT NAME BAR --- */
 .patient-overlay-content {
     position: absolute;
-    bottom: 2rem;
     left: 0;
     right: 0;
+    bottom: 0;
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     align-items: center;
+    justify-content: space-between; /* Pushes info to left, logo to right */
     gap: 1rem;
     z-index: 2;
-    padding: 0 1rem;
+    padding: 0.75rem 1rem;
+    background-color: rgba(17, 17, 17, 0.75);
+    backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px);
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    border-bottom-left-radius: var(--border-radius);
+    border-bottom-right-radius: var(--border-radius);
+    width: 100%;
+    min-height: 56px;
+    transition: all 0.3s ease;
 }
+
+.patient-info {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
 .patient-name {
-    font-size: 1.25rem;
-    font-weight: 700;
+    width: auto;
+    font-size: 1.2rem;
+    font-weight: 600;
     color: #fff;
-    text-shadow: 1px 1px 3px rgba(0,0,0,0.7);
+    text-shadow: 1px 1px 3px rgba(0,0,0,0.9);
+    line-height: 1.2;
+    letter-spacing: 0.02em;
+    background: none;
+    margin: 0;
+    padding: 0;
 }
+
 .speaking-indicator {
-    width: 80px;
-    height: 40px;
-    background: rgba(255, 255, 255, 0.9);
-    border-radius: var(--border-radius);
+    width: auto;
+    height: auto;
+    background: transparent;
+    border-radius: 0;
     display: flex;
     justify-content: center;
     align-items: center;
     gap: 5px;
-    padding: 0 10px;
-    border: 1px solid rgba(0,0,0,0.1);
-    backdrop-filter: blur(4px);
+    padding: 0;
+    border: none;
+    backdrop-filter: none;
+    margin-bottom: 0;
 }
 html[data-theme='dark'] .speaking-indicator {
-    background: rgba(30, 30, 30, 0.9);
-    border-color: rgba(255,255,255,0.1);
+    background: transparent;
+    border-color: transparent;
 }
 .speaking-indicator-bar {
     width: 4px;
     height: 4px;
-    background-color: var(--color-primary);
+    background-color: #ffffff;
     border-radius: 2px;
     animation: speaking-anim 1.2s infinite ease-in-out;
 }
-.speaking-indicator-bar:nth-child(2) { animation-delay: -1.0s; }
-.speaking-indicator-bar:nth-child(3) { animation-delay: -0.8s; }
-.speaking-indicator-bar:nth-child(4) { animation-delay: -0.6s; }
 @keyframes speaking-anim {
     0%, 40%, 100% { transform: scaleY(1); }
     20% { transform: scaleY(5); }
