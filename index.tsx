@@ -1589,7 +1589,7 @@ const SimulationPage = () => {
         if (!selectedDiagnosis && currentCase) {
             setSelectedDiagnosis(diagnosis);
             setExplanationModalContent({
-                title: "Diagnosis Rationale",
+                title: "Explaination",
                 content: currentCase.correctDiagnosisExplanation,
             });
             setActiveTab('questions'); // Auto-switch to questions after diagnosis
