@@ -69,6 +69,7 @@ export type Database = {
           id?: number;
           user_id?: string;
         };
+        Relationships: [];
       };
       leaderboard: {
         Row: {
@@ -83,6 +84,7 @@ export type Database = {
           score?: number;
           user_id?: string;
         };
+        Relationships: [];
       };
       notifications: {
         Row: {
@@ -115,6 +117,7 @@ export type Database = {
           is_read?: boolean;
           created_at?: string;
         };
+        Relationships: [];
       };
       profiles: {
         Row: {
@@ -132,6 +135,7 @@ export type Database = {
           full_name?: string | null;
           id?: string;
         };
+        Relationships: [];
       };
       progress: {
         Row: {
@@ -152,6 +156,7 @@ export type Database = {
           updated_at?: string;
           user_id?: string;
         };
+        Relationships: [];
       };
       streaks: {
         Row: {
@@ -172,6 +177,7 @@ export type Database = {
           max_streak?: number;
           user_id?: string;
         };
+        Relationships: [];
       };
     };
     Views: {
@@ -351,8 +357,9 @@ export const logCaseCompletion = async (
   caseResult: { case_title: string; case_details: string; score: number }
 ): Promise<void> => {
     try {
-        const today = new Date();
-        const todayStr = today.toISOString().split('T')[0];
+        const todayUTC = new Date();
+        todayUTC.setUTCHours(0, 0, 0, 0);
+        const todayStr = todayUTC.toISOString().split('T')[0];
         
         // --- 1. READ all necessary data concurrently ---
         const [
@@ -390,21 +397,27 @@ export const logCaseCompletion = async (
             updated_at: new Date().toISOString(),
         };
         
-        // Prepare Streak update data
+        // Prepare Streak update data (FIXED LOGIC)
         let newCurrentStreak = 1;
         let newMaxStreak = streakData?.max_streak || 0;
 
         if (streakData && streakData.last_active_day) {
-            const lastActive = new Date(streakData.last_active_day);
-            const yesterday = new Date(today);
-            yesterday.setDate(today.getDate() - 1);
+            const lastActiveDayStr = streakData.last_active_day;
             
-            if (streakData.last_active_day === todayStr) {
+            if (lastActiveDayStr === todayStr) {
                 newCurrentStreak = streakData.current_streak; // Already active today, no change
-            } else if (lastActive.toDateString() === yesterday.toDateString()) {
-                newCurrentStreak = streakData.current_streak + 1; // Active yesterday, increment
+            } else {
+                const lastActiveDate = new Date(lastActiveDayStr); // Interpreted as YYYY-MM-DD in UTC
+                lastActiveDate.setUTCHours(0,0,0,0);
+                
+                const diffTime = todayUTC.getTime() - lastActiveDate.getTime();
+                const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+                
+                if (diffDays === 1) {
+                    newCurrentStreak = streakData.current_streak + 1; // Active yesterday, increment
+                }
+                // Otherwise, streak is broken, it's reset to 1 (the default)
             }
-            // Otherwise, streak is broken, it's reset to 1 (the default)
         }
         if (newCurrentStreak > newMaxStreak) {
             newMaxStreak = newCurrentStreak;

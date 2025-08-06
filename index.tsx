@@ -1833,9 +1833,14 @@ const ChatWindow = () => {
     };
 
     const speak = useCallback(async (text: string, gender: 'Male' | 'Female' | 'Other', age: number) => {
-        const ELEVENLABS_API_KEY = "sk_93aed662e047c36df99f3a065658936bb3e829158c9c29e5";
+        const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
         setSpeechError(null);
+
         if (isMuted || !text) return;
+        if (!ELEVENLABS_API_KEY) {
+            console.warn("ElevenLabs API key not configured. Skipping text-to-speech.");
+            return;
+        }
 
         // Stop any currently playing audio
         if (audioRef.current) {
