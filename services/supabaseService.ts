@@ -4,196 +4,155 @@
  */
 import { createClient, Session, User, AuthError } from '@supabase/supabase-js';
 
-// --- TYPE DEFINITIONS ---
-type TrainingPhase = 'Pre-clinical' | 'Para-clinical' | 'Clinical' | 'Internship' | 'NExT/FMGE Prep';
+// --- DATABASE SCHEMA (DEFINED FIRST FOR TYPE RESOLUTION) ---
+// The recursive `Json` type was unused and could contribute to type instantiation errors. Removing it.
 
-export interface Profile {
-  id: string;
-  email: string;
-  full_name: string | null;
-  training_phase: TrainingPhase | null;
-}
-
-export interface Streak {
-    user_id: string;
-    current_streak: number;
-    max_streak: number;
-    last_active_day: string;
-}
-
-export interface CaseLog {
-    id: number;
-    user_id: string;
-    case_title: string;
-    case_details: string; // JSON string of case result
-    created_at: string;
-}
-
-export type NotificationType = 'achievement' | 'reminder' | 'new_feature' | 'system_message' | 'leaderboard';
-
-export interface Notification {
-  id: number;
-  user_id: string;
-  title: string;
-  message: string;
-  type: NotificationType;
-  link: string | null;
-  is_read: boolean;
-  created_at: string;
-}
-
-// --- DATABASE SCHEMA ---
-// This Database type definition has been corrected to resolve type inference issues.
-export type Database = {
+export interface Database {
   public: {
     Tables: {
       case_logs: {
         Row: {
-          case_details: string;
-          case_title: string;
-          created_at: string;
-          id: number;
-          user_id: string;
-        };
+          case_details: string
+          case_title: string
+          created_at: string
+          id: number
+          user_id: string
+        }
         Insert: {
-          case_details: string;
-          case_title: string;
-          created_at?: string;
-          id?: number;
-          user_id: string;
-        };
+          case_details: string
+          case_title: string
+          created_at?: string
+          id?: number
+          user_id: string
+        }
         Update: {
-          case_details?: string;
-          case_title?: string;
-          created_at?: string;
-          id?: number;
-          user_id?: string;
-        };
-        Relationships: [];
-      };
+          case_details?: string
+          case_title?: string
+          created_at?: string
+          id?: number
+          user_id?: string
+        }
+      }
       leaderboard: {
         Row: {
-          score: number;
-          user_id: string;
-        };
+          score: number
+          user_id: string
+        }
         Insert: {
-          score?: number;
-          user_id: string;
-        };
+          score?: number
+          user_id: string
+        }
         Update: {
-          score?: number;
-          user_id?: string;
-        };
-        Relationships: [];
-      };
+          score?: number
+          user_id?: string
+        }
+      }
       notifications: {
         Row: {
-          id: number;
-          user_id: string;
-          title: string;
-          message: string;
-          type: 'achievement' | 'reminder' | 'new_feature' | 'system_message' | 'leaderboard';
-          link: string | null;
-          is_read: boolean;
-          created_at: string;
-        };
+          created_at: string
+          id: number
+          is_read: boolean
+          link: string | null
+          message: string
+          title: string
+          type: "achievement" | "reminder" | "new_feature" | "system_message" | "leaderboard"
+          user_id: string
+        }
         Insert: {
-          id?: number;
-          user_id: string;
-          title: string;
-          message: string;
-          type?: 'achievement' | 'reminder' | 'new_feature' | 'system_message' | 'leaderboard';
-          link?: string | null;
-          is_read?: boolean;
-          created_at?: string;
-        };
+          created_at?: string
+          id?: number
+          is_read?: boolean
+          link?: string | null
+          message: string
+          title: string
+          type?: "achievement" | "reminder" | "new_feature" | "system_message" | "leaderboard"
+          user_id: string
+        }
         Update: {
-          id?: number;
-          user_id?: string;
-          title?: string;
-          message?: string;
-          type?: 'achievement' | 'reminder' | 'new_feature' | 'system_message' | 'leaderboard';
-          link?: string | null;
-          is_read?: boolean;
-          created_at?: string;
-        };
-        Relationships: [];
-      };
+          created_at?: string
+          id?: number
+          is_read?: boolean
+          link?: string | null
+          message?: string
+          title?: string
+          type?: "achievement" | "reminder" | "new_feature" | "system_message" | "leaderboard"
+          user_id?: string
+        }
+      }
       profiles: {
         Row: {
-          email: string;
-          full_name: string | null;
-          id: string;
-        };
+          email: string
+          full_name: string | null
+          id: string
+        }
         Insert: {
-          email: string;
-          full_name?: string | null;
-          id: string;
-        };
+          email: string
+          full_name?: string | null
+          id: string
+        }
         Update: {
-          email?: string;
-          full_name?: string | null;
-          id?: string;
-        };
-        Relationships: [];
-      };
+          email?: string
+          full_name?: string | null
+          id?: string
+        }
+      }
       progress: {
         Row: {
-          completed: number;
-          id: number;
-          updated_at: string;
-          user_id: string;
-        };
+          completed: number
+          id: number
+          updated_at: string
+          user_id: string
+        }
         Insert: {
-          completed?: number;
-          id?: number;
-          updated_at?: string;
-          user_id: string;
-        };
+          completed?: number
+          id?: number
+          updated_at?: string
+          user_id: string
+        }
         Update: {
-          completed?: number;
-          id?: number;
-          updated_at?: string;
-          user_id?: string;
-        };
-        Relationships: [];
-      };
+          completed?: number
+          id?: number
+          updated_at?: string
+          user_id?: string
+        }
+      }
       streaks: {
         Row: {
-          current_streak: number;
-          last_active_day: string;
-          max_streak: number;
-          user_id: string;
-        };
+          current_streak: number
+          last_active_day: string
+          max_streak: number
+          user_id: string
+        }
         Insert: {
-          current_streak?: number;
-          last_active_day: string;
-          max_streak?: number;
-          user_id: string;
-        };
+          current_streak?: number
+          last_active_day: string
+          max_streak?: number
+          user_id: string
+        }
         Update: {
-          current_streak?: number;
-          last_active_day?: string;
-          max_streak?: number;
-          user_id?: string;
-        };
-        Relationships: [];
-      };
-    };
+          current_streak?: number
+          last_active_day?: string
+          max_streak?: number
+          user_id?: string
+        }
+      }
+    }
     Views: {
-      [_ in never]: never;
-    };
+      [_ in never]: never
+    }
     Functions: {
-      [_ in never]: never;
-    };
+      [_ in never]: never
+    }
+    // The Enums block was redundant with the `notifications` table definition and complicated
+    // the Database type, leading to compiler errors. It's removed to simplify the type.
     Enums: {
-      notification_type: 'achievement' | 'reminder' | 'new_feature' | 'system_message' | 'leaderboard';
-    };
+      [_ in never]: never
+    }
     CompositeTypes: {
-      [_ in never]: never;
-    };
-  };
-};
+      [_ in never]: never
+    }
+  }
+}
 
 
 // --- SUPABASE CLIENT INITIALIZATION ---
@@ -205,6 +164,27 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey);
+
+// --- TYPE DEFINITIONS ---
+type TrainingPhase = 'Pre-clinical' | 'Para-clinical' | 'Clinical' | 'Internship' | 'NExT/FMGE Prep';
+
+// Derive types from the Database schema for type safety.
+export type Profile = Database['public']['Tables']['profiles']['Row'] & {
+  training_phase: TrainingPhase | null;
+};
+export type Streak = Database['public']['Tables']['streaks']['Row'];
+export type CaseLog = Database['public']['Tables']['case_logs']['Row'];
+export type Notification = Database['public']['Tables']['notifications']['Row'];
+// Redefined NotificationType directly as the Enums block was removed from the Database interface.
+export type NotificationType = "achievement" | "reminder" | "new_feature" | "system_message" | "leaderboard";
+
+export interface LeaderboardEntry {
+    user_id: string;
+    score: number;
+    profiles: {
+        full_name: string | null;
+    } | null;
+}
 
 
 // --- AUTHENTICATION FUNCTIONS ---
@@ -296,7 +276,7 @@ export const getNotifications = async (userId: string): Promise<Notification[]> 
         console.error('Error fetching notifications:', error);
         return [];
     }
-    return (data as Notification[]) || [];
+    return data || [];
 };
 
 export const markNotificationAsRead = async (notificationId: number, userId: string): Promise<boolean> => {
@@ -339,7 +319,7 @@ export const getCaseLogs = async (userId: string): Promise<CaseLog[]> => {
     return data || [];
 };
 
-export const getStreak = async(userId: string): Promise<Database['public']['Tables']['streaks']['Row'] | null> => {
+export const getStreak = async(userId: string): Promise<Streak | null> => {
     const { data, error } = await supabase
         .from('streaks')
         .select('*')
@@ -397,28 +377,32 @@ export const logCaseCompletion = async (
             updated_at: new Date().toISOString(),
         };
         
-        // Prepare Streak update data (FIXED LOGIC)
+        // Prepare Streak update data with robust, timezone-safe logic
         let newCurrentStreak = 1;
         let newMaxStreak = streakData?.max_streak || 0;
 
-        if (streakData && streakData.last_active_day) {
+        if (streakData?.last_active_day) {
             const lastActiveDayStr = streakData.last_active_day;
-            
+
             if (lastActiveDayStr === todayStr) {
-                newCurrentStreak = streakData.current_streak; // Already active today, no change
+                // User already completed a case today, streak doesn't change.
+                newCurrentStreak = streakData.current_streak;
             } else {
-                const lastActiveDate = new Date(lastActiveDayStr); // Interpreted as YYYY-MM-DD in UTC
-                lastActiveDate.setUTCHours(0,0,0,0);
-                
-                const diffTime = todayUTC.getTime() - lastActiveDate.getTime();
-                const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
-                
-                if (diffDays === 1) {
-                    newCurrentStreak = streakData.current_streak + 1; // Active yesterday, increment
+                // Check if the last active day was yesterday.
+                const yesterdayUTC = new Date(todayUTC);
+                yesterdayUTC.setUTCDate(todayUTC.getUTCDate() - 1);
+                const yesterdayStr = yesterdayUTC.toISOString().split('T')[0];
+
+                if (lastActiveDayStr === yesterdayStr) {
+                    // It was yesterday, so increment the streak.
+                    newCurrentStreak = (streakData.current_streak || 0) + 1;
                 }
-                // Otherwise, streak is broken, it's reset to 1 (the default)
+                // If it was not yesterday (and not today), the streak is broken.
+                // newCurrentStreak is already 1 by default, which is correct for a reset.
             }
         }
+        
+        // Update max streak if the new current streak is greater.
         if (newCurrentStreak > newMaxStreak) {
             newMaxStreak = newCurrentStreak;
         }
@@ -448,11 +432,11 @@ export const logCaseCompletion = async (
 
         // --- 3. EXECUTE all writes ---
         const writes = await Promise.all([
-            supabase.from('case_logs').insert(caseLogInsert),
+            supabase.from('case_logs').insert([caseLogInsert]),
             supabase.from('progress').upsert(progressUpsert, { onConflict: 'user_id' }),
             supabase.from('streaks').upsert(streakUpsert, { onConflict: 'user_id' }),
             supabase.from('leaderboard').upsert(leaderboardUpsert, { onConflict: 'user_id' }),
-            supabase.from('notifications').insert(notificationInsert),
+            supabase.from('notifications').insert([notificationInsert]),
         ]);
 
         // Check for errors in any of the write operations
@@ -471,7 +455,7 @@ export const logCaseCompletion = async (
 
 
 // --- LEADERBOARD ---
-const botUsers = [
+const botUsers: LeaderboardEntry[] = [
     { user_id: 'bot_1', score: 1450, profiles: { full_name: 'Dr. Axiom' } },
     { user_id: 'bot_2', score: 1280, profiles: { full_name: 'Doc Synth' } },
     { user_id: 'bot_3', score: 1120, profiles: { full_name: 'Prognosis Pete' } },
@@ -484,7 +468,7 @@ const botUsers = [
     { user_id: 'bot_10', score: 380, profiles: { full_name: 'Algorithmic Alex' } },
 ];
 
-export const getLeaderboard = async (): Promise<any[]> => {
+export const getLeaderboard = async (): Promise<LeaderboardEntry[]> => {
     // 1. Fetch leaderboard scores
     const { data: leaderboardData, error: leaderboardError } = await supabase
         .from('leaderboard')
@@ -512,7 +496,7 @@ export const getLeaderboard = async (): Promise<any[]> => {
         .select('id, full_name')
         .in('id', userIds);
 
-    let realUsersWithProfiles;
+    let realUsersWithProfiles: LeaderboardEntry[];
 
     if (profilesError) {
         console.error('Error fetching profiles for leaderboard:', profilesError);
@@ -534,7 +518,7 @@ export const getLeaderboard = async (): Promise<any[]> => {
     const realUserIds = new Set(realUsers.map(u => u.user_id));
     const filteredBots = botUsers.filter(b => !realUserIds.has(b.user_id));
 
-    const combined = [...realUsersWithProfiles, ...filteredBots];
+    const combined: LeaderboardEntry[] = [...realUsersWithProfiles, ...filteredBots];
 
     // 5. Sort by score descending and take the top 20
     return combined.sort((a, b) => (b.score || 0) - (a.score || 0)).slice(0, 20);

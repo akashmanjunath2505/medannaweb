@@ -303,14 +303,23 @@ html[data-theme='dark'] .alert.alert-error { border-color: var(--color-danger); 
     border: 1px solid var(--color-border);
     position: relative;
 }
+/* Add a transparent overlay to block all pointer events on the iframe */
+.patient-visualizer::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1;
+}
 .patient-visualizer .patient-video {
     position: absolute;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    object-fit: cover;
-    object-position: center 30%; /* Prioritize showing head and shoulders */
+    border: none;
     visibility: hidden;
     opacity: 0;
     transition: opacity 0.3s ease-in-out;
@@ -345,92 +354,6 @@ html[data-theme='dark'] .alert.alert-error { border-color: var(--color-danger); 
     box-shadow: 0 0 20px 0 var(--color-primary-light);
 }
 .patient-icon svg { width: 60px; height: 60px; }
-
-.medanna-logo-badge {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background-color: #000000;
-    color: #ffffff;
-    padding: 0.75rem 1.5rem;
-    font-family: var(--font-heading);
-    font-weight: 800;
-    font-size: 1.2rem;
-    flex-shrink: 0;
-    border-bottom-right-radius: var(--border-radius);
-}
-
-.medanna-logo-badge .medanna-anna {
-    color: var(--color-primary);
-}
-
-
-/* --- FIXED PATIENT NAME BAR --- */
-.patient-overlay-content {
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    display: flex;
-    align-items: stretch; /* Make children have same height */
-    z-index: 2;
-    width: 100%;
-}
-
-.patient-info {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    flex-grow: 1; /* Take up remaining space */
-    background-color: rgba(30, 30, 30, 0.75);
-    backdrop-filter: blur(5px);
-    -webkit-backdrop-filter: blur(5px);
-    padding: 0.75rem 1.5rem;
-    border-bottom-left-radius: var(--border-radius);
-}
-
-.patient-name {
-    width: auto;
-    font-size: 1.2rem;
-    font-weight: 600;
-    color: #fff;
-    text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
-    line-height: 1.2;
-    letter-spacing: 0.02em;
-    background: none;
-    margin: 0;
-    padding: 0;
-}
-
-.speaking-indicator {
-    width: auto;
-    height: auto;
-    background: transparent;
-    border-radius: 0;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 5px;
-    padding: 0;
-    border: none;
-    backdrop-filter: none;
-    margin-bottom: 0;
-}
-html[data-theme='dark'] .speaking-indicator {
-    background: transparent;
-    border-color: transparent;
-}
-.speaking-indicator-bar {
-    width: 4px;
-    height: 4px;
-    background-color: #ffffff;
-    border-radius: 2px;
-    animation: speaking-anim 1.2s infinite ease-in-out;
-}
-@keyframes speaking-anim {
-    0%, 40%, 100% { transform: scaleY(1); }
-    20% { transform: scaleY(5); }
-}
 
 /* Tab Navigation */
 .tab-nav {

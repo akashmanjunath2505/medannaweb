@@ -23,6 +23,17 @@ interface ChatMessage {
     timestamp: string;
 }
 
+// Added for video selection
+interface ParsedVideo {
+    title: string;
+    videoId: string;
+    state: 'idle' | 'talking';
+    gender: 'Male' | 'Female';
+    min_age: number;
+    max_age: number;
+}
+
+
 export interface MCQ {
     question: string;
     options: string[];
@@ -218,82 +229,241 @@ export async function pickSpecialtyForCase(trainingPhase: TrainingPhase): Promis
     return 'Internal Medicine'; 
 }
 
+export function createChatForCase(caseData: DiagnosticCase): Chat {
+    const aiInstance = getAi();
+    
+    // Determine if we're talking to the patient or a guardian
+    const patientPersona = caseData.patientProfile.age < 7
+        ? `${caseData.patientProfile.name}'s mother`
+        : caseData.patientProfile.name;
+
+    const systemInstruction = `
+You are role-playing as a patient (or their guardian) in a medical simulation. Your name is ${patientPersona}. You are a ${caseData.patientProfile.age}-year-old ${caseData.patientProfile.gender}.
+
+Your personality and knowledge are based ONLY on the following case information. Do not reveal this information unless the user (the 'doctor') asks a relevant question. Do not act like an AI. Your answers should be natural and conversational, reflecting how a real person would speak.
+
+- **Chief Complaint:** "${caseData.chiefComplaint}"
+- **History of Present Illness:** ${caseData.historyOfPresentIllness}
+- **Physical Exam Findings (only reveal if the doctor asks to perform a specific exam):** ${caseData.physicalExam}
+- **Lab Results (only reveal if the doctor asks for specific tests):** ${caseData.labResults}
+
+**Rules of Engagement:**
+- Respond from the perspective of ${patientPersona}.
+- Answer only what is asked. Do not volunteer information from the case history unless prompted.
+- If asked a question that cannot be answered from the provided information, respond naturally, like "I don't know," or "The doctor didn't tell me about that."
+- If the user asks for a physical exam or lab test, provide ONLY the relevant finding from the case data. For example, if asked "How does your chest sound?", you can say "The doctor listened with a stethoscope and said... [provide auscultation findings]".
+- Keep your answers concise and human-like.
+- **Do not, under any circumstances, provide a diagnosis or medical advice.** Your role is to be the patient.
+`;
+
+    const chat = aiInstance.chats.create({
+        model: 'gemini-2.5-flash',
+        config: { systemInstruction },
+    });
+    return chat;
+}
 
 export async function generateSoapNoteForCase(caseData: DiagnosticCase): Promise<string> {
     const aiInstance = getAi();
     const prompt = `
-        Generate a detailed SOAP note for the following patient case.
-        Format it with clear section headers: Subjective, Objective, Assessment, and Plan.
-        Each section header should be on a new line and bolded (e.g., **Subjective:**).
-        Include physical exam findings, labs, vitals, and clinical reasoning.
-        Tailor the language to reflect real-world physician documentation used in clinical practice.
-        Case Data: ${JSON.stringify(caseData, null, 2)}
+        Based on the following clinical case, please generate a comprehensive SOAP note.
+        A SOAP note consists of four parts: Subjective, Objective, Assessment, and Plan.
+
+        **Case Details:**
+        - **Title:** ${caseData.title}
+        - **Patient:** ${caseData.patientProfile.name}, ${caseData.patientProfile.age}, ${caseData.patientProfile.gender}
+        - **Chief Complaint:** ${caseData.chiefComplaint}
+        - **History of Present Illness:** ${caseData.historyOfPresentIllness}
+        - **Physical Exam:** ${caseData.physicalExam}
+        - **Lab Results:** ${caseData.labResults}
+        - **Final Diagnosis:** ${caseData.potentialDiagnoses.find(d => d.isCorrect)?.diagnosis}
+
+        **Instructions:**
+        - **Subjective:** Summarize the patient's chief complaint and history of present illness.
+        - **Objective:** Summarize the relevant findings from the physical exam and lab results.
+        - **Assessment:** State the final diagnosis.
+        - **Plan:** Propose a brief, appropriate management plan based on the diagnosis.
+
+        Please format the output clearly with headings for S, O, A, and P.
     `;
 
-    const response = await aiInstance.models.generateContent({ model: "gemini-2.5-flash", contents: prompt });
-    return response.text.trim();
+    const response = await aiInstance.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: prompt
+    });
+
+    return response.text;
 }
 
 export async function generateHint(caseData: DiagnosticCase, chatHistory: ChatMessage[]): Promise<string> {
     const aiInstance = getAi();
-    const formattedHistory = chatHistory.map(msg => `${msg.sender === 'user' ? 'Doctor' : 'Patient'}: ${msg.text}`).join('\n');
+    const history = chatHistory.map(m => `${m.sender}: ${m.text}`).join('\n');
+
     const prompt = `
-        You are an expert clinical tutor. Your role is to provide a subtle hint to a medical student who is diagnosing a patient.
-        Based on the patient's case and the conversation history so far, provide one short, simple question the student should consider asking next.
-        **RULES:**
-        1. The hint MUST be a question.
-        2. Do NOT give away the diagnosis or explain why.
-        3. Keep the hint very short.
-        4. Base the hint on what's missing from the conversation.
-        **Patient Case:** ${JSON.stringify(caseData, null, 2)}
-        **Conversation History:**\n${formattedHistory}
-        Provide the next best question to ask as a hint.
+        You are a medical education assistant. A student is working through a clinical case and has asked for a hint.
+        Your task is to provide a single, concise, and helpful Socratic-style question to guide them without giving away the answer.
+
+        **Case Information:**
+        - **Training Phase:** ${caseData.tags.trainingPhase}
+        - **Chief Complaint:** ${caseData.chiefComplaint}
+        - **Correct Diagnosis:** ${caseData.potentialDiagnoses.find(d => d.isCorrect)?.diagnosis}
+
+        **Student's Conversation with Patient so far:**
+        ${history}
+
+        **Instructions:**
+        1. Analyze the conversation history.
+        2. Identify what key area the student might be missing (e.g., a specific part of the history, a relevant physical exam, a differential diagnosis).
+        3. Formulate a single question to prompt them in the right direction. For example, "Have you considered asking about...?" or "What physical exam finding might be relevant for...?"
+        4. The hint should be appropriate for a student in the ${caseData.tags.trainingPhase} phase.
+        
+        Respond with ONLY the hint question.
     `;
 
-    const response = await aiInstance.models.generateContent({ model: "gemini-2.5-flash", contents: prompt });
-    return response.text.trim().replace(/"/g, ''); // Remove quotes from response
+    const response = await aiInstance.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: prompt
+    });
+
+    return response.text.trim();
 }
 
+// --- VIDEO SELECTION LOGIC ---
+interface VideoInfo {
+    title: string;
+    id: string;
+}
 
-export async function createChatForCase(caseData: DiagnosticCase): Promise<Chat> {
+const GUMLET_VIDEO_DATA: VideoInfo[] = [
+    // Old Woman (60-99)
+    { title: 'old_woman_talking(age_60-99)', id: '68948ea7aa43dddb5c4b08d8' },
+    { title: 'old_woman_idle(age_60-99)', id: '68948ea5aa43dddb5c4b08c4' },
+
+    // Old Man (60-99)
+    { title: 'old_man_talking(age_60-99)', id: '68948ea4aa43dddb5c4b08a2' },
+    { title: 'old_man_idle(age_60-99)', id: '68948e058d992eda26aeb7fe' }, // Re-using 45-60 idle as 60+ was missing/incorrect
+
+    // Old Man (45-60)
+    { title: 'old_man_talking(age_45-60)', id: '68948e5bbcf5dc9e17266b7e' },
+    { title: 'old_man_idle(age_45-60)', id: '68948e058d992eda26aeb7fe' },
+
+    // Man (30-45)
+    { title: 'man_talking(age_30-45)', id: '68948dfabcf5dc9e172664cf' },
+    { title: 'man_idle(age_30-45)', id: '68948da7aa43dddb5c4af70c' },
+
+    // Man (23-30)
+    { title: 'man_talking(age_23-30)', id: '68948df28d992eda26aeb624' },
+    { title: 'man_idle(age_23-30)', id: '68948da5aa43dddb5c4af6e1' },
+
+    // Lady (30-45)
+    { title: 'lady_talking(age_30-45)', id: '68948d9eaa43dddb5c4af667' },
+    { title: 'lady_idle(age_30-45)', id: '68948d33bcf5dc9e172655ec' },
+
+    // Lady (23-30)
+    { title: 'lady_talking(age_23-30)', id: '68948d98aa43dddb5c4af5ff' },
+    { title: 'lady_idle(age_23-30)', id: '68948d0aaa43dddb5c4aeb10' },
+
+    // Adolescent Girl (15-22)
+    { title: 'adolescent_girl_talking(age_15-22)', id: '68948d09bcf5dc9e172652f0' },
+    { title: 'adolescent_girl_idle(age_15-22)', id: '68948d098d992eda26aea4c2' },
+
+    // Adolescent Boy (15-22)
+    { title: 'adolescent_boy_talking(age_15-22)', id: '68948d098d992eda26aea4b2' },
+    { title: 'adolescent_boy_idle(age_15-22)', id: '68948d098d992eda26aea4c2' }, // Re-using girl's idle
+
+    // Girl (7-15)
+    { title: 'girl_talking(age_7-15)', id: '68948d09bcf5dc9e172652f0' }, // Re-using adolescent girl's talking
+    { title: 'girl_idle(age_7-15)', id: '68948d0aaa43dddb5c4aeae7' },
+
+    // Boy (7-15)
+    { title: 'boy_talking(age_7-15)', id: '68948d098d992eda26aea4c4' },
+    { title: 'boy_idle(age_7-15)', id: '68948d0aaa43dddb5c4aeae7' }, // Re-using girl's idle
+];
+
+export async function getAvailableVideos(): Promise<ParsedVideo[]> {
+    const parseTitle = (title: string): Omit<ParsedVideo, 'videoId' | 'title'> | null => {
+        const match = title.match(/^([a-zA-Z_]+)_(idle|talking)\(age_(\d+)-(\d+)\)$/);
+        if (!match) {
+            console.warn(`Could not parse video title: ${title}`);
+            return null;
+        }
+        
+        const [, char, state, minAge, maxAge] = match;
+        
+        let gender: 'Male' | 'Female' = 'Female'; // Default to Female
+        const maleKeywords = ['boy', 'man', 'male'];
+        if (maleKeywords.some(kw => char.includes(kw))) {
+            gender = 'Male';
+        }
+
+        return {
+            state: state as 'idle' | 'talking',
+            gender,
+            min_age: parseInt(minAge, 10),
+            max_age: parseInt(maxAge, 10),
+        };
+    };
+
+    return GUMLET_VIDEO_DATA.map(({ title, id }) => {
+        const parsedMeta = parseTitle(title);
+        if (!parsedMeta) {
+            return null;
+        }
+        return {
+            title,
+            videoId: id,
+            ...parsedMeta,
+        };
+    }).filter((v): v is ParsedVideo => v !== null);
+}
+
+export async function pickBestVideo(
+    patientProfile: DiagnosticCase['patientProfile'],
+    availableVideos: ParsedVideo[]
+): Promise<{ idle: string | null; talking: string | null }> {
     const aiInstance = getAi();
-    const { name, age } = caseData.patientProfile;
     
-    const isChildCase = age < 7;
-    let systemInstruction: string;
+    const videoListForPrompt = availableVideos.map(v => v.title).join('\n');
+
+    const prompt = `
+        You are a video selection expert. Based on the patient's profile, select the most appropriate "idle" video and "talking" video from the list below.
+        The patient is a ${patientProfile.age}-year-old ${patientProfile.gender}.
+
+        Available video titles:
+        ${videoListForPrompt}
+
+        Select one "idle" and one "talking" video title that best matches the patient's age and gender. Your response must be a JSON object with two keys: "idle" and "talking". The values should be the full titles of the selected videos.
+        For example:
+        {
+          "idle": "man_idle(age_45-60)",
+          "talking": "man_talking(age_45-60)"
+        }
+    `;
     
-    if (isChildCase) {
-        systemInstruction = `
-            You are a patient simulator for a medical training application.
-            You will roleplay as the mother of ${name}, a ${age}-year-old child. Do NOT act as a doctor or AI.
-            You are bringing your child to the doctor. All your answers should be from your perspective as a concerned parent.
-            Your personality should be that of a worried mother.
-            **RULES:**
-            1. Only answer questions about your child based on the provided 'chiefComplaint' and 'historyOfPresentIllness'.
-            2. You DO NOT know the 'physicalExam' results, 'labResults', or the 'finalDiagnosis' for your child. If asked, say you don't know or that's what you're here to find out.
-            3. Answer concisely and naturally.
-            4. Do not break character. Always speak as the mother.
-        `;
-    } else {
-        systemInstruction = `
-            You are a patient simulator for a medical training application.
-            You will roleplay as ${name}, a ${age}-year-old patient. Do NOT act as a doctor or AI.
-            Your personality should be consistent with your condition.
-            **RULES:**
-            1. Only answer questions based on the 'chiefComplaint' and 'historyOfPresentIllness' sections.
-            2. You DO NOT know your 'physicalExam', 'labResults', or 'finalDiagnosis'. If asked, say you don't know.
-            3. Answer concisely and naturally.
-            4. Do not break character.
-        `;
-    }
-    
-    return aiInstance.chats.create({
-        model: 'gemini-2.5-flash',
-        config: { systemInstruction },
-        history: [{
-          role: "user", parts: [{ text: `Case Context: ${JSON.stringify(caseData)}` }],
-        },{
-          role: "model", parts: [{ text: "I understand. I am ready to begin the simulation." }],
-        }]
+    const responseSchema = {
+        type: Type.OBJECT,
+        properties: {
+            idle: { type: Type.STRING },
+            talking: { type: Type.STRING },
+        },
+        required: ["idle", "talking"],
+    };
+
+    const response = await aiInstance.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: prompt,
+        config: {
+            responseMimeType: "application/json",
+            responseSchema,
+        }
     });
+
+    try {
+        const jsonText = response.text.trim();
+        const parsed = JSON.parse(jsonText) as { idle: string; talking: string };
+        return { idle: parsed.idle, talking: parsed.talking };
+    } catch(e) {
+        console.error("Failed to parse video selection from AI:", response.text, e);
+        return { idle: null, talking: null }; // Fallback
+    }
 }
