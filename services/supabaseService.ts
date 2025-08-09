@@ -5,7 +5,9 @@
 import { createClient, Session, User, AuthError } from '@supabase/supabase-js';
 
 // --- DATABASE SCHEMA (DEFINED FIRST FOR TYPE RESOLUTION) ---
-// The recursive `Json` type was unused and could contribute to type instantiation errors. Removing it.
+
+// Define Enums separately to prevent circular type references that can cause TS errors.
+type NotificationTypeEnum = "achievement" | "reminder" | "new_feature" | "system_message" | "leaderboard";
 
 export interface Database {
   public: {
@@ -55,7 +57,7 @@ export interface Database {
           link: string | null
           message: string
           title: string
-          type: "achievement" | "reminder" | "new_feature" | "system_message" | "leaderboard"
+          type: NotificationTypeEnum
           user_id: string
         }
         Insert: {
@@ -65,7 +67,7 @@ export interface Database {
           link?: string | null
           message: string
           title: string
-          type?: "achievement" | "reminder" | "new_feature" | "system_message" | "leaderboard"
+          type?: NotificationTypeEnum
           user_id: string
         }
         Update: {
@@ -75,7 +77,7 @@ export interface Database {
           link?: string | null
           message?: string
           title?: string
-          type?: "achievement" | "reminder" | "new_feature" | "system_message" | "leaderboard"
+          type?: NotificationTypeEnum
           user_id?: string
         }
       }
@@ -137,20 +139,12 @@ export interface Database {
         }
       }
     }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      [_ in never]: never
-    }
-    // The Enums block was redundant with the `notifications` table definition and complicated
-    // the Database type, leading to compiler errors. It's removed to simplify the type.
+    Views: {}
+    Functions: {}
     Enums: {
-      [_ in never]: never
+      notification_type: NotificationTypeEnum
     }
-    CompositeTypes: {
-      [_ in never]: never
-    }
+    CompositeTypes: {}
   }
 }
 
@@ -175,8 +169,8 @@ export type Profile = Database['public']['Tables']['profiles']['Row'] & {
 export type Streak = Database['public']['Tables']['streaks']['Row'];
 export type CaseLog = Database['public']['Tables']['case_logs']['Row'];
 export type Notification = Database['public']['Tables']['notifications']['Row'];
-// Redefined NotificationType directly as the Enums block was removed from the Database interface.
-export type NotificationType = "achievement" | "reminder" | "new_feature" | "system_message" | "leaderboard";
+// This type is now derived from the Database interface for a single source of truth.
+export type NotificationType = NotificationTypeEnum;
 
 export interface LeaderboardEntry {
     user_id: string;
