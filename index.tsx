@@ -1661,6 +1661,9 @@ const PatientVisualizer = () => {
                     </div>
                 </div>
             )}
+            <div className="patient-visualizer-logo-container">
+                <img src="https://raw.githubusercontent.com/akashmanjunath2505/public/main/medanna_logo.png" alt="MedAnna Logo" className="patient-visualizer-logo" />
+            </div>
         </div>
     );
 };

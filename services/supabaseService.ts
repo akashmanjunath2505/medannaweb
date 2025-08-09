@@ -57,7 +57,7 @@ export interface Database {
           link: string | null
           message: string
           title: string
-          type: NotificationTypeEnum
+          type: "achievement" | "reminder" | "new_feature" | "system_message" | "leaderboard"
           user_id: string
         }
         Insert: {
@@ -67,7 +67,7 @@ export interface Database {
           link?: string | null
           message: string
           title: string
-          type?: NotificationTypeEnum
+          type?: "achievement" | "reminder" | "new_feature" | "system_message" | "leaderboard"
           user_id: string
         }
         Update: {
@@ -77,7 +77,7 @@ export interface Database {
           link?: string | null
           message?: string
           title?: string
-          type?: NotificationTypeEnum
+          type?: "achievement" | "reminder" | "new_feature" | "system_message" | "leaderboard"
           user_id?: string
         }
       }
@@ -142,7 +142,7 @@ export interface Database {
     Views: {}
     Functions: {}
     Enums: {
-      notification_type: NotificationTypeEnum
+      notification_type: "achievement" | "reminder" | "new_feature" | "system_message" | "leaderboard"
     }
     CompositeTypes: {}
   }
@@ -426,11 +426,11 @@ export const logCaseCompletion = async (
 
         // --- 3. EXECUTE all writes ---
         const writes = await Promise.all([
-            supabase.from('case_logs').insert([caseLogInsert]),
-            supabase.from('progress').upsert(progressUpsert, { onConflict: 'user_id' }),
-            supabase.from('streaks').upsert(streakUpsert, { onConflict: 'user_id' }),
-            supabase.from('leaderboard').upsert(leaderboardUpsert, { onConflict: 'user_id' }),
-            supabase.from('notifications').insert([notificationInsert]),
+            supabase.from('case_logs').insert(caseLogInsert),
+            supabase.from('progress').upsert(progressUpsert),
+            supabase.from('streaks').upsert(streakUpsert),
+            supabase.from('leaderboard').upsert(leaderboardUpsert),
+            supabase.from('notifications').insert(notificationInsert),
         ]);
 
         // Check for errors in any of the write operations
