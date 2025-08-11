@@ -1089,7 +1089,7 @@ const LeaderboardTab = () => {
                             <tr key={entry.user_id} className={isCurrentUser ? 'current-user' : ''}>
                                 <td data-label="Rank" className="rank">#{index + 1}</td>
                                 <td data-label="User">{entry.profiles?.full_name || 'Anonymous'}{isCurrentUser ? ' (You)' : ''}</td>
-                                <td data-label="Score" className="score">{entry.score}</td>
+                                <td data-label="Score" className="score">{entry.score.toFixed(1)}</td>
                             </tr>
                         )
                     })}
@@ -1121,8 +1121,8 @@ const DashboardMetrics = () => {
              <div className="metric-card">
                 <div className="metric-icon score"><IconTrophy /></div>
                 <div className="metric-info">
-                    <h3>{score ?? 0}</h3>
-                    <p>Total Score</p>
+                    <h3>{score !== null ? score.toFixed(1) : '0.0'}</h3>
+                    <p>Average Score</p>
                 </div>
             </div>
         </div>
@@ -1388,17 +1388,31 @@ const QuestionsPanel = ({
         const mcqCorrectCount = Object.entries(selectedMcqAnswers).filter(([idx, answer]) =>
             currentCase.mcqs[parseInt(idx)].correctAnswerIndex === answer
         ).length;
+        const mcqTotal = currentCase.mcqs.length;
 
         const caseResultDetails = {
             diagnosisCorrect,
             mcqCorrectCount,
-            mcqTotal: currentCase.mcqs.length
+            mcqTotal: mcqTotal,
         };
+        
+        // New scoring system from 0 to 10
+        let newScore = 0;
+        if (diagnosisCorrect) {
+            newScore += 5;
+        }
+
+        if (mcqTotal > 0) {
+            newScore += 5 * (mcqCorrectCount / mcqTotal);
+        } else if (diagnosisCorrect) {
+            // If there are no MCQs, a correct diagnosis is worth full points
+            newScore = 10;
+        }
         
         logCompletedCase({
             case_title: currentCase.title,
             case_details: JSON.stringify(caseResultDetails),
-            score: (diagnosisCorrect ? 50 : 0) + (mcqCorrectCount * 10),
+            score: newScore,
         });
         setPage('home');
     };

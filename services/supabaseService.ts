@@ -6,6 +6,9 @@ import { createClient, Session, User, AuthError } from '@supabase/supabase-js';
 
 // --- DATABASE SCHEMA (DEFINED FIRST FOR TYPE RESOLUTION) ---
 
+// Define enum types outside the main Database interface to avoid overly deep type instantiation.
+export type NotificationTypeEnum = "achievement" | "reminder" | "new_feature" | "system_message" | "leaderboard";
+
 export interface Database {
   public: {
     Tables: {
@@ -21,14 +24,14 @@ export interface Database {
           case_details: string
           case_title: string
           created_at?: string
-          id?: number
+          id?: never
           user_id: string
         }
         Update: {
           case_details?: string
           case_title?: string
           created_at?: string
-          id?: number
+          id?: never
           user_id?: string
         }
       }
@@ -43,7 +46,7 @@ export interface Database {
         }
         Update: {
           score?: number
-          user_id?: string
+          user_id?: never
         }
       }
       notifications: {
@@ -54,27 +57,27 @@ export interface Database {
           link: string | null
           message: string
           title: string
-          type: "achievement" | "reminder" | "new_feature" | "system_message" | "leaderboard"
+          type: NotificationTypeEnum
           user_id: string
         }
         Insert: {
           created_at?: string
-          id?: number
+          id?: never
           is_read?: boolean
           link?: string | null
           message: string
           title: string
-          type?: "achievement" | "reminder" | "new_feature" | "system_message" | "leaderboard"
+          type?: NotificationTypeEnum
           user_id: string
         }
         Update: {
           created_at?: string
-          id?: number
+          id?: never
           is_read?: boolean
           link?: string | null
           message?: string
           title?: string
-          type?: "achievement" | "reminder" | "new_feature" | "system_message" | "leaderboard"
+          type?: NotificationTypeEnum
           user_id?: string
         }
       }
@@ -92,7 +95,7 @@ export interface Database {
         Update: {
           email?: string
           full_name?: string | null
-          id?: string
+          id?: never
         }
       }
       progress: {
@@ -104,13 +107,13 @@ export interface Database {
         }
         Insert: {
           completed?: number
-          id?: number
+          id?: never
           updated_at?: string
           user_id: string
         }
         Update: {
           completed?: number
-          id?: number
+          id?: never
           updated_at?: string
           user_id?: string
         }
@@ -132,15 +135,13 @@ export interface Database {
           current_streak?: number
           last_active_day?: string
           max_streak?: number
-          user_id?: string
+          user_id?: never
         }
       }
     }
     Views: {}
     Functions: {}
-    Enums: {
-      notification_type: "achievement" | "reminder" | "new_feature" | "system_message" | "leaderboard"
-    }
+    Enums: {}
     CompositeTypes: {}
   }
 }
@@ -166,8 +167,8 @@ export type Profile = Database['public']['Tables']['profiles']['Row'] & {
 export type Streak = Database['public']['Tables']['streaks']['Row'];
 export type CaseLog = Database['public']['Tables']['case_logs']['Row'];
 export type Notification = Database['public']['Tables']['notifications']['Row'];
-// This type is now derived from the Database interface for a single source of truth.
-export type NotificationType = Database['public']['Enums']['notification_type'];
+// This type is now derived from the standalone enum for a single source of truth.
+export type NotificationType = NotificationTypeEnum;
 
 export interface LeaderboardEntry {
     user_id: string;
@@ -360,11 +361,10 @@ export const logCaseCompletion = async (
             case_details: caseResult.case_details,
         };
 
-        // Prepare Progress update data
-        const currentProgress = progressData?.completed || 0;
+        const casesCompletedBeforeThis = progressData?.completed || 0;
         const progressUpsert: Database['public']['Tables']['progress']['Insert'] = {
             user_id: userId,
-            completed: currentProgress + 1,
+            completed: casesCompletedBeforeThis + 1,
             updated_at: new Date().toISOString(),
         };
         
@@ -405,18 +405,24 @@ export const logCaseCompletion = async (
             last_active_day: todayStr
         };
 
-        // Prepare Leaderboard update data
-        const currentScore = leaderboardData?.score || 0;
+        // Prepare Leaderboard update data - NEW LOGIC
+        // The score in the leaderboard is now an AVERAGE score.
+        // Formula: new_avg = (old_avg * old_count + new_score) / (old_count + 1)
+        const currentAverageScore = leaderboardData?.score || 0;
+        const newAverageScore = 
+            (currentAverageScore * casesCompletedBeforeThis + caseResult.score) / (casesCompletedBeforeThis + 1);
+
         const leaderboardUpsert: Database['public']['Tables']['leaderboard']['Insert'] = {
             user_id: userId,
-            score: currentScore + caseResult.score
+            score: newAverageScore
         };
+
 
         // Prepare notification
         const notificationInsert: Database['public']['Tables']['notifications']['Insert'] = {
             user_id: userId,
             title: `Case Completed!`,
-            message: `You earned ${caseResult.score} points for "${caseResult.case_title}".`,
+            message: `You scored ${caseResult.score.toFixed(1)}/10 on "${caseResult.case_title}".`,
             type: 'achievement',
             link: '#activity'
         };
@@ -447,16 +453,16 @@ export const logCaseCompletion = async (
 
 // --- LEADERBOARD ---
 const botUsers: LeaderboardEntry[] = [
-    { user_id: 'bot_1', score: 1450, profiles: { full_name: 'Dr. Axiom' } },
-    { user_id: 'bot_2', score: 1280, profiles: { full_name: 'Doc Synth' } },
-    { user_id: 'bot_3', score: 1120, profiles: { full_name: 'Prognosis Pete' } },
-    { user_id: 'bot_4', score: 980, profiles: { full_name: 'Data-driven Dana' } },
-    { user_id: 'bot_5', score: 850, profiles: { full_name: 'Medibot 3000' } },
-    { user_id: 'bot_6', score: 720, profiles: { full_name: 'Holistic Hal' } },
-    { user_id: 'bot_7', score: 610, profiles: { full_name: 'Clinical AI' } },
-    { user_id: 'bot_8', score: 530, profiles: { full_name: 'Virtual Vivian' } },
-    { user_id: 'bot_9', score: 450, profiles: { full_name: 'Synapse Sam' } },
-    { user_id: 'bot_10', score: 380, profiles: { full_name: 'Algorithmic Alex' } },
+    { user_id: 'bot_1', score: 9.8, profiles: { full_name: 'Dr. Axiom' } },
+    { user_id: 'bot_2', score: 9.5, profiles: { full_name: 'Doc Synth' } },
+    { user_id: 'bot_3', score: 9.2, profiles: { full_name: 'Prognosis Pete' } },
+    { user_id: 'bot_4', score: 8.9, profiles: { full_name: 'Data-driven Dana' } },
+    { user_id: 'bot_5', score: 8.5, profiles: { full_name: 'Medibot 3000' } },
+    { user_id: 'bot_6', score: 8.2, profiles: { full_name: 'Holistic Hal' } },
+    { user_id: 'bot_7', score: 7.9, profiles: { full_name: 'Clinical AI' } },
+    { user_id: 'bot_8', score: 7.5, profiles: { full_name: 'Virtual Vivian' } },
+    { user_id: 'bot_9', score: 7.2, profiles: { full_name: 'Synapse Sam' } },
+    { user_id: 'bot_10', score: 6.8, profiles: { full_name: 'Algorithmic Alex' } },
 ];
 
 export const getLeaderboard = async (): Promise<LeaderboardEntry[]> => {
