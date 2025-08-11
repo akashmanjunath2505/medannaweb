@@ -23,17 +23,6 @@ interface ChatMessage {
     timestamp: string;
 }
 
-// Added for video selection
-interface ParsedVideo {
-    title: string;
-    videoId: string;
-    state: 'idle' | 'talking';
-    gender: 'Male' | 'Female';
-    min_age: number;
-    max_age: number;
-}
-
-
 export interface MCQ {
     question: string;
     options: string[];
@@ -329,141 +318,130 @@ export async function generateHint(caseData: DiagnosticCase, chatHistory: ChatMe
 }
 
 // --- VIDEO SELECTION LOGIC ---
-interface VideoInfo {
-    title: string;
-    id: string;
+interface AvatarData {
+    key: string;
+    description: string;
+    gender: 'Male' | 'Female';
+    ageRange: [number, number];
+    videos: {
+        idle: string; // video ID
+        talking: string; // video ID
+    };
 }
 
-const GUMLET_VIDEO_DATA: VideoInfo[] = [
-    // Old Woman (60-99)
-    { title: 'old_woman_talking(age_60-99)', id: '68948ea7aa43dddb5c4b08d8' },
-    { title: 'old_woman_idle(age_60-99)', id: '68948ea5aa43dddb5c4b08c4' },
-
-    // Old Man (60-99)
-    { title: 'old_man_talking(age_60-99)', id: '68948ea4aa43dddb5c4b08a2' },
-    { title: 'old_man_idle(age_60-99)', id: '68948e058d992eda26aeb7fe' }, // Re-using 45-60 idle as 60+ was missing/incorrect
-
-    // Old Man (45-60)
-    { title: 'old_man_talking(age_45-60)', id: '68948e5bbcf5dc9e17266b7e' },
-    { title: 'old_man_idle(age_45-60)', id: '68948e058d992eda26aeb7fe' },
-
-    // Man (30-45)
-    { title: 'man_talking(age_30-45)', id: '68948dfabcf5dc9e172664cf' },
-    { title: 'man_idle(age_30-45)', id: '68948da7aa43dddb5c4af70c' },
-
-    // Man (23-30)
-    { title: 'man_talking(age_23-30)', id: '68948df28d992eda26aeb624' },
-    { title: 'man_idle(age_23-30)', id: '68948da5aa43dddb5c4af6e1' },
-
-    // Lady (30-45)
-    { title: 'lady_talking(age_30-45)', id: '68948d9eaa43dddb5c4af667' },
-    { title: 'lady_idle(age_30-45)', id: '68948d33bcf5dc9e172655ec' },
-
-    // Lady (23-30)
-    { title: 'lady_talking(age_23-30)', id: '68948d98aa43dddb5c4af5ff' },
-    { title: 'lady_idle(age_23-30)', id: '68948d0aaa43dddb5c4aeb10' },
-
-    // Adolescent Girl (15-22)
-    { title: 'adolescent_girl_talking(age_15-22)', id: '68948d09bcf5dc9e172652f0' },
-    { title: 'adolescent_girl_idle(age_15-22)', id: '68948d098d992eda26aea4c2' },
-
-    // Adolescent Boy (15-22)
-    { title: 'adolescent_boy_talking(age_15-22)', id: '68948d098d992eda26aea4b2' },
-    { title: 'adolescent_boy_idle(age_15-22)', id: '68948d098d992eda26aea4c2' }, // Re-using girl's idle
-
-    // Girl (7-15)
-    { title: 'girl_talking(age_7-15)', id: '68948d09bcf5dc9e172652f0' }, // Re-using adolescent girl's talking
-    { title: 'girl_idle(age_7-15)', id: '68948d0aaa43dddb5c4aeae7' },
-
-    // Boy (7-15)
-    { title: 'boy_talking(age_7-15)', id: '68948d098d992eda26aea4c4' },
-    { title: 'boy_idle(age_7-15)', id: '68948d0aaa43dddb5c4aeae7' }, // Re-using girl's idle
+// Data is now structured in pairs, ensuring idle/talking videos are from the same avatar.
+const AVATAR_DATA: AvatarData[] = [
+    { key: 'old_woman', description: 'An elderly woman (60-99 years)', gender: 'Female', ageRange: [60, 99], videos: { talking: '68948ea7aa43dddb5c4b08d8', idle: '68948ea5aa43dddb5c4b08c4' }},
+    { key: 'old_man', description: 'An elderly man (60-99 years)', gender: 'Male', ageRange: [60, 99], videos: { talking: '68948ea4aa43dddb5c4b08a2', idle: '68948e058d992eda26aeb7fe' }},
+    { key: 'middle_aged_man', description: 'A middle-aged man (45-60 years)', gender: 'Male', ageRange: [45, 60], videos: { talking: '68948e5bbcf5dc9e17266b7e', idle: '68948e058d992eda26aeb7fe' }},
+    { key: 'man_30s_40s', description: 'A man in his 30s-40s', gender: 'Male', ageRange: [30, 45], videos: { talking: '68948dfabcf5dc9e172664cf', idle: '68948da7aa43dddb5c4af70c' }},
+    { key: 'man_20s', description: 'A man in his 20s', gender: 'Male', ageRange: [23, 30], videos: { talking: '68948df28d992eda26aeb624', idle: '68948da5aa43dddb5c4af6e1' }},
+    { key: 'lady_30s_40s', description: 'A woman in her 30s-40s', gender: 'Female', ageRange: [30, 45], videos: { talking: '68948d9eaa43dddb5c4af667', idle: '68948d33bcf5dc9e172655ec' }},
+    { key: 'lady_20s', description: 'A woman in her 20s', gender: 'Female', ageRange: [23, 30], videos: { talking: '68948d98aa43dddb5c4af5ff', idle: '68948d0aaa43dddb5c4aeb10' }},
+    // The "girl" avatar was removed to prevent sharing a talking animation with this one.
+    { key: 'young_female', description: 'A young female (7-22 years)', gender: 'Female', ageRange: [7, 22], videos: { talking: '68948d09bcf5dc9e172652f0', idle: '68948d098d992eda26aea4c2' }},
+    { key: 'adolescent_boy', description: 'An adolescent boy (15-22 years)', gender: 'Male', ageRange: [15, 22], videos: { talking: '68948d098d992eda26aea4b2', idle: '68948d098d992eda26aea4c2' }},
+    { key: 'young_boy', description: 'A young boy (7-15 years)', gender: 'Male', ageRange: [7, 15], videos: { talking: '68948d098d992eda26aea4c4', idle: '68948d0aaa43dddb5c4aeae7' }},
 ];
 
-export async function getAvailableVideos(): Promise<ParsedVideo[]> {
-    const parseTitle = (title: string): Omit<ParsedVideo, 'videoId' | 'title'> | null => {
-        const match = title.match(/^([a-zA-Z_]+)_(idle|talking)\(age_(\d+)-(\d+)\)$/);
-        if (!match) {
-            console.warn(`Could not parse video title: ${title}`);
-            return null;
-        }
-        
-        const [, char, state, minAge, maxAge] = match;
-        
-        let gender: 'Male' | 'Female' = 'Female'; // Default to Female
-        const maleKeywords = ['boy', 'man', 'male'];
-        if (maleKeywords.some(kw => char.includes(kw))) {
-            gender = 'Male';
-        }
+// A deterministic fallback in case the LLM fails
+function findBestFallback(patientProfile: DiagnosticCase['patientProfile']): { idle: string | null; talking: string | null } {
+    const { age, gender } = patientProfile;
+    
+    const candidates = AVATAR_DATA.filter(avatar => 
+        (avatar.gender === gender || gender === 'Other') &&
+        age >= avatar.ageRange[0] &&
+        age <= avatar.ageRange[1]
+    );
 
-        return {
-            state: state as 'idle' | 'talking',
-            gender,
-            min_age: parseInt(minAge, 10),
-            max_age: parseInt(maxAge, 10),
-        };
-    };
+    // Prioritize exact gender match
+    let bestMatch = candidates.find(c => c.gender === gender);
+    // If no exact match (e.g., for 'Other'), take the first candidate in the age range.
+    if (!bestMatch) {
+        bestMatch = candidates[0];
+    }
+    
+    // If still no match, find the one with the smallest age difference
+    if (!bestMatch) {
+        let minDiff = Infinity;
+        AVATAR_DATA.forEach(avatar => {
+            if (avatar.gender === gender || gender === 'Other') {
+                const diff = Math.min(Math.abs(age - avatar.ageRange[0]), Math.abs(age - avatar.ageRange[1]));
+                if (diff < minDiff) {
+                    minDiff = diff;
+                    bestMatch = avatar;
+                }
+            }
+        });
+    }
 
-    return GUMLET_VIDEO_DATA.map(({ title, id }) => {
-        const parsedMeta = parseTitle(title);
-        if (!parsedMeta) {
-            return null;
-        }
+    if (bestMatch) {
         return {
-            title,
-            videoId: id,
-            ...parsedMeta,
+            idle: bestMatch.videos.idle,
+            talking: bestMatch.videos.talking
         };
-    }).filter((v): v is ParsedVideo => v !== null);
+    }
+    
+    // Absolute fallback
+    return { idle: null, talking: null };
 }
 
 export async function pickBestVideo(
     patientProfile: DiagnosticCase['patientProfile'],
-    availableVideos: ParsedVideo[]
 ): Promise<{ idle: string | null; talking: string | null }> {
     const aiInstance = getAi();
     
-    const videoListForPrompt = availableVideos.map(v => v.title).join('\n');
-
+    // Create a list of descriptions for the prompt.
+    const avatarChoices = AVATAR_DATA.map(avatar => `- key: ${avatar.key}, description: ${avatar.description}`).join('\n');
+    
     const prompt = `
-        You are a video selection expert. Based on the patient's profile, select the most appropriate "idle" video and "talking" video from the list below.
+        You are a video selection expert. Based on the patient's profile, select the most appropriate avatar from the list below.
         The patient is a ${patientProfile.age}-year-old ${patientProfile.gender}.
 
-        Available video titles:
-        ${videoListForPrompt}
+        Available avatars:
+        ${avatarChoices}
 
-        Select one "idle" and one "talking" video title that best matches the patient's age and gender. Your response must be a JSON object with two keys: "idle" and "talking". The values should be the full titles of the selected videos.
+        Select the single best avatar 'key' that matches the patient's age and gender. Your response must be a JSON object with a single key: "selected_key". The value should be the key of the selected avatar.
         For example:
         {
-          "idle": "man_idle(age_45-60)",
-          "talking": "man_talking(age_45-60)"
+          "selected_key": "man_30s_40s"
         }
     `;
     
     const responseSchema = {
         type: Type.OBJECT,
         properties: {
-            idle: { type: Type.STRING },
-            talking: { type: Type.STRING },
+            selected_key: { type: Type.STRING },
         },
-        required: ["idle", "talking"],
+        required: ["selected_key"],
     };
 
-    const response = await aiInstance.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: prompt,
-        config: {
-            responseMimeType: "application/json",
-            responseSchema,
-        }
-    });
-
     try {
+        const response = await aiInstance.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: prompt,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema,
+            }
+        });
+
         const jsonText = response.text.trim();
-        const parsed = JSON.parse(jsonText) as { idle: string; talking: string };
-        return { idle: parsed.idle, talking: parsed.talking };
+        const parsed = JSON.parse(jsonText) as { selected_key: string };
+        
+        const selectedAvatar = AVATAR_DATA.find(avatar => avatar.key === parsed.selected_key);
+        
+        if (selectedAvatar) {
+            return {
+                idle: selectedAvatar.videos.idle,
+                talking: selectedAvatar.videos.talking,
+            };
+        } else {
+             console.warn(`AI selected an invalid avatar key: ${parsed.selected_key}. Falling back.`);
+             return findBestFallback(patientProfile);
+        }
     } catch(e) {
-        console.error("Failed to parse video selection from AI:", response.text, e);
-        return { idle: null, talking: null }; // Fallback
+        console.error("Failed to parse avatar selection from AI:", e);
+        return findBestFallback(patientProfile);
     }
 }

@@ -6,9 +6,6 @@ import { createClient, Session, User, AuthError } from '@supabase/supabase-js';
 
 // --- DATABASE SCHEMA (DEFINED FIRST FOR TYPE RESOLUTION) ---
 
-// Define Enums separately to prevent circular type references that can cause TS errors.
-type NotificationTypeEnum = "achievement" | "reminder" | "new_feature" | "system_message" | "leaderboard";
-
 export interface Database {
   public: {
     Tables: {
@@ -170,7 +167,7 @@ export type Streak = Database['public']['Tables']['streaks']['Row'];
 export type CaseLog = Database['public']['Tables']['case_logs']['Row'];
 export type Notification = Database['public']['Tables']['notifications']['Row'];
 // This type is now derived from the Database interface for a single source of truth.
-export type NotificationType = NotificationTypeEnum;
+export type NotificationType = Database['public']['Enums']['notification_type'];
 
 export interface LeaderboardEntry {
     user_id: string;

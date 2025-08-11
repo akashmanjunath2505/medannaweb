@@ -4,7 +4,7 @@
 */
 import React, { useState, useEffect, useCallback, useRef, StrictMode, ReactNode, createContext, useContext, useMemo } from 'react';
 import { createRoot } from 'react-dom/client';
-import { generateCase, createChatForCase, DiagnosticCase, MCQ, generateSoapNoteForCase, generateHint, CaseTags, GenerationFilters, pickSpecialtyForCase, pickBestVideo, getAvailableVideos, Chat } from './services/geminiService';
+import { generateCase, createChatForCase, DiagnosticCase, MCQ, generateSoapNoteForCase, generateHint, CaseTags, GenerationFilters, pickSpecialtyForCase, pickBestVideo, Chat } from './services/geminiService';
 import { supabase, signIn, signUp, signOut, getUserProfile, updateUserProfile, getCaseLogs, logCaseCompletion as supabaseLogCaseCompletion, getLeaderboard, getStreak, Profile, Streak, CaseLog, getUserScore, getNotifications, markNotificationAsRead as supabaseMarkNotificationAsRead, markAllNotificationsAsRead as supabaseMarkAllNotificationsAsRead, Notification, NotificationType } from './services/supabaseService';
 import { Session, User } from '@supabase/supabase-js';
 
@@ -424,32 +424,17 @@ const AppContextProvider = ({ children }: { children: ReactNode }) => {
 
     const loadPatientVideos = async (profile: DiagnosticCase['patientProfile']) => {
         try {
-            // Step 1: Fetch the list of available videos with their correct IDs and metadata.
-            const availableVideosData = await getAvailableVideos();
-            if (availableVideosData.length === 0) {
-                console.warn("No video data is available, cannot find patient videos.");
-                setPatientVideos({ idle: null, talking: null });
-                return;
-            }
-
-            // Step 2: Use LLM to pick the best videos based on their titles/metadata.
-            const selection = await pickBestVideo(profile, availableVideosData);
+            // Use LLM to pick the best avatar. This returns a pair of guaranteed-to-match video IDs.
+            const videoIds = await pickBestVideo(profile);
             
-            // Step 3: Find the full video objects (with IDs) using the selected titles.
-            const idleVideoData = availableVideosData.find(v => v.title === selection.idle);
-            const talkingVideoData = availableVideosData.find(v => v.title === selection.talking);
-            
-            const idleVideoId = idleVideoData?.videoId ?? null;
-            const talkingVideoId = talkingVideoData?.videoId ?? null;
-
-            if (!idleVideoId || !talkingVideoId) {
-                console.warn("LLM video selection returned a title not found in the dataset, or a null selection. Falling back to icon.", selection);
+            if (!videoIds.idle || !videoIds.talking) {
+                console.warn("Video selection returned null IDs. Falling back to icon.", videoIds);
                 setPatientVideos({ idle: null, talking: null });
             } else {
-                 setPatientVideos({ idle: idleVideoId, talking: talkingVideoId });
+                 setPatientVideos({ idle: videoIds.idle, talking: videoIds.talking });
             }
         } catch (error) {
-            console.error("Error during video selection or lookup process, will fallback to icon.", error);
+            console.error("Error during video selection process, will fallback to icon.", error);
             setPatientVideos({ idle: null, talking: null });
         }
     };
@@ -1668,23 +1653,6 @@ const PatientVisualizer = () => {
     );
 };
 
-// Moved outside component to avoid being a dependency of useCallback
-const getVoiceId = (gender: 'Male' | 'Female' | 'Other', age: number) => {
-    // Use standard, free voices that are reliably available
-    if (age < 18) {
-        // Select voice based on gender for children/adolescents
-        if (gender === 'Male') {
-            return 'Yko75PaHn3AbAC91rV8G'; // "Antoni" - good for a teenage boy voice
-        }
-        return 'EXAVITQu4vr4xnSDxMaL'; // "Bella" (younger female, good for children/adolescents)
-    }
-    if (gender === 'Male') {
-        return 'pNInz6obpgDQGcFmaJgB'; // "Adam" (standard adult male voice)
-    }
-    // Default to female for 'Female' or 'Other'
-    return '21m00Tcm4TlvDq8ikWAM'; // "Rachel" (standard adult female voice)
-};
-
 const ChatWindow = () => {
     const { currentCase, handleGenerateHint, hint, hintCount, isGeneratingHint, hintError, clearHint } = useAppContext();
     const [chat, setChat] = useState<Chat | null>(null);
@@ -1697,8 +1665,20 @@ const ChatWindow = () => {
     const messagesRef = useRef(messages);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const audioElRef = useRef<HTMLAudioElement>(null);
-    const ELEVENLABS_API_KEY = 'sk_514c2fcaf10a4c0b3616adf12cb153d646e4082a3ae44bce';
+
+    // --- TTS Configuration ---
+    const ELEVENLABS_API_KEY = 'sk_3f7ba731a54aec30db588cfc54a5db41e82a013aecbf305c';
+
     messagesRef.current = messages; // Keep ref updated with the latest messages
+
+    // Helper for ElevenLabs voice selection
+    const getVoiceId = (age: number, gender: 'Male' | 'Female' | 'Other'): string => {
+        if (gender === 'Male') {
+            return 'pNInz6obpgDQGcFmaJgB'; // Adam
+        }
+        // Default to female for 'Female' or 'Other'
+        return 'EXAVITQu4vr4xnSDxMaL'; // Bella
+    };
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -1709,7 +1689,6 @@ const ChatWindow = () => {
         const audioEl = audioElRef.current;
         if (!audioEl) return;
 
-        // Centralized handler to end speech and clean up blob URLs
         const cleanupAndEndSpeech = () => {
             window.dispatchEvent(new CustomEvent('speech-end'));
             if (audioEl.src && audioEl.src.startsWith('blob:')) {
@@ -1726,7 +1705,6 @@ const ChatWindow = () => {
         audioEl.addEventListener('abort', cleanupAndEndSpeech);
         audioEl.addEventListener('pause', handlePause);
         
-        // Cleanup function
         return () => {
             audioEl.removeEventListener('ended', cleanupAndEndSpeech);
             audioEl.removeEventListener('error', cleanupAndEndSpeech);
@@ -1751,20 +1729,16 @@ const ChatWindow = () => {
         }
         setMessages(initialMessages);
         
-        // Create chat instance
         const chatInstance = createChatForCase(currentCase);
         setChat(chatInstance);
 
 
-        // Return a cleanup function to save history on unmount
         return () => {
             if (messagesRef.current.length > 0) {
                 localStorage.setItem(chatHistoryKey, JSON.stringify(messagesRef.current));
             } else {
-                 // If there are no messages, remove the key to keep storage clean
                 localStorage.removeItem(chatHistoryKey);
             }
-            // Stop any ongoing speech when component unmounts
             const audioEl = audioElRef.current;
             if (audioEl) {
                 audioEl.pause();
@@ -1772,18 +1746,16 @@ const ChatWindow = () => {
         };
     }, [currentCase]);
 
-    const speak = useCallback(async (text: string, gender: 'Male' | 'Female' | 'Other', age: number) => {
+    const speak = useCallback(async (text: string, age: number, gender: 'Male' | 'Female' | 'Other') => {
         setSpeechError(null);
         const audioEl = audioElRef.current;
         if (!audioEl) return;
 
-        // Stop any currently playing audio. The 'pause' event listener will handle dispatching 'speech-end'.
         audioEl.pause();
 
         if (isMuted || !text) return;
         if (!ELEVENLABS_API_KEY) {
-            console.warn("ElevenLabs API key not configured. Skipping text-to-speech.");
-            setSpeechError("Text-to-speech API key is not configured.");
+            setSpeechError("TTS API key is not configured.");
             return;
         }
 
@@ -1792,31 +1764,41 @@ const ChatWindow = () => {
         
         window.dispatchEvent(new CustomEvent('speech-start'));
         
-        const voiceId = getVoiceId(gender, age);
-        const url = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`;
-        const headers = {
-            'Accept': 'audio/mpeg',
-            'Content-Type': 'application/json',
-            'xi-api-key': ELEVENLABS_API_KEY
-        };
-        const body = JSON.stringify({
-            text: cleanText,
-            model_id: 'eleven_multilingual_v2',
-            voice_settings: { stability: 0.5, similarity_boost: 0.75 }
-        });
-
         try {
+            const voiceId = getVoiceId(age, gender);
+            const url = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`;
+            const headers = {
+                'Accept': 'audio/mpeg',
+                'xi-api-key': ELEVENLABS_API_KEY,
+                'Content-Type': 'application/json',
+            };
+            const body = JSON.stringify({
+                text: cleanText,
+                model_id: 'eleven_multilingual_v2',
+                voice_settings: { stability: 0.5, similarity_boost: 0.75 },
+            });
+
             const response = await fetch(url, { method: 'POST', headers, body });
+            
             if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.detail?.message || `HTTP error! status: ${response.status}`);
+                let errorText = `HTTP error! status: ${response.status}`;
+                try {
+                    const errorData = await response.json();
+                    if (errorData.detail?.message) errorText = errorData.detail.message;
+                } catch(e) {/* no json body */}
+                throw new Error(`ElevenLabs API error: ${errorText}`);
             }
+            
             const blob = await response.blob();
+            if (blob.size === 0) {
+                throw new Error("Received empty audio data from ElevenLabs API.");
+            }
+            
             const audioUrl = URL.createObjectURL(blob);
             audioEl.src = audioUrl;
             
             audioEl.play().catch(e => {
-                console.error("Audio playback failed:", e);
+                console.error("Audio playback failed (ElevenLabs):", e);
                 setSpeechError("Could not play audio. Please ensure your browser allows autoplay.");
                 window.dispatchEvent(new CustomEvent('speech-end'));
                 URL.revokeObjectURL(audioUrl);
@@ -1824,10 +1806,11 @@ const ChatWindow = () => {
 
         } catch (error) {
             console.error("ElevenLabs API error:", error);
-            setSpeechError(`Text-to-speech failed. ${error instanceof Error ? error.message : "Unknown error"}`);
+            setSpeechError(`TTS failed. ${error instanceof Error ? error.message : "Unknown error"}`);
             window.dispatchEvent(new CustomEvent('speech-end'));
         }
-    }, [isMuted, ELEVENLABS_API_KEY]);
+    }, [isMuted]);
+
 
     const handleSendMessage = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -1841,7 +1824,7 @@ const ChatWindow = () => {
             const patientMessage: ChatMessage = { sender: 'patient', text: response.text, timestamp: new Date().toISOString() };
             setMessages(prev => [...prev, patientMessage]);
             if(currentCase?.patientProfile) {
-                speak(response.text, currentCase.patientProfile.gender, currentCase.patientProfile.age);
+                speak(response.text, currentCase.patientProfile.age, currentCase.patientProfile.gender);
             }
         } catch (error) {
             console.error('Error sending message:', error);
