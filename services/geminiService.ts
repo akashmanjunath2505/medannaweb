@@ -18,7 +18,7 @@ interface Diagnosis {
 }
 
 interface ChatMessage {
-    sender: 'user' | 'patient';
+    sender: 'user' | 'patient' | 'system';
     text: string;
     timestamp: string;
 }

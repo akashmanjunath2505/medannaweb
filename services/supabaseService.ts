@@ -6,19 +6,32 @@ import { createClient, Session, User, AuthError } from '@supabase/supabase-js';
 
 // --- DATABASE SCHEMA (DEFINED FIRST FOR TYPE RESOLUTION) ---
 
-// Using `any` for Json to prevent "Type instantiation is excessively deep" errors.
-// This is a common workaround for complex recursive types in Supabase schemas.
-export type Json = any;
+// Define the specific shape of the case_details JSON object for type safety.
+// This resolves issues with recursive type definitions that can cause compiler errors.
+export interface CaseResultDetails {
+  diagnosisCorrect: boolean;
+  mcqCorrectCount: number;
+  mcqTotal: number;
+  epaScores: { history: number; physicalExam: number; };
+  hintPenalty: number;
+  finalScore: number;
+  scoreBreakdown: {
+    diagnosis: number;
+    knowledge: number;
+    historyTaking: number;
+    physicalExam: number;
+  };
+}
 
-// Define the enum type separately to break the circular reference
-export type NotificationTypeEnum = "achievement" | "reminder" | "new_feature" | "system_message" | "leaderboard";
-
+// The previous definition of NotificationTypeEnum and its usage was causing a circular dependency
+// that made TypeScript's type inference fail for Supabase client methods. By defining the enum
+// directly inside the Database type and referencing it internally, we break the cycle and fix the errors.
 export type Database = {
   public: {
     Tables: {
       case_logs: {
         Row: {
-          case_details: Json
+          case_details: any
           case_title: string
           created_at: string
           id: number
@@ -26,7 +39,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
-          case_details: Json
+          case_details: any
           case_title: string
           created_at?: string
           id?: number
@@ -34,22 +47,13 @@ export type Database = {
           user_id: string
         }
         Update: {
-          case_details?: Json
+          case_details?: any
           case_title?: string
           created_at?: string
           id?: number
           score?: number
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "case_logs_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          }
-        ]
       }
       leaderboard: {
         Row: {
@@ -64,15 +68,6 @@ export type Database = {
           score?: number
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "leaderboard_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: true
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          }
-        ]
       }
       notifications: {
         Row: {
@@ -82,7 +77,7 @@ export type Database = {
           link: string | null
           message: string
           title: string
-          type: NotificationTypeEnum
+          type: Database["public"]["Enums"]["notification_type"]
           user_id: string
         }
         Insert: {
@@ -92,7 +87,7 @@ export type Database = {
           link?: string | null
           message: string
           title: string
-          type: NotificationTypeEnum
+          type: Database["public"]["Enums"]["notification_type"]
           user_id: string
         }
         Update: {
@@ -102,18 +97,9 @@ export type Database = {
           link?: string | null
           message?: string
           title?: string
-          type?: NotificationTypeEnum
+          type?: Database["public"]["Enums"]["notification_type"]
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "notifications_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          }
-        ]
       }
       profiles: {
         Row: {
@@ -131,15 +117,6 @@ export type Database = {
           full_name?: string | null
           id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "profiles_id_fkey"
-            columns: ["id"]
-            isOneToOne: true
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          }
-        ]
       }
       progress: {
         Row: {
@@ -160,15 +137,6 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "progress_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: true
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          }
-        ]
       }
       streaks: {
         Row: {
@@ -189,21 +157,12 @@ export type Database = {
           max_streak?: number
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "streaks_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: true
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          }
-        ]
       }
     }
     Views: {}
     Functions: {}
     Enums: {
-      notification_type: NotificationTypeEnum
+      notification_type: "achievement" | "reminder" | "new_feature" | "system_message" | "leaderboard"
     }
     CompositeTypes: {}
   }
@@ -494,9 +453,9 @@ export const logCaseCompletion = async (
         // --- 3. EXECUTE all writes ---
         const writes = await Promise.all([
             supabase.from('case_logs').insert(caseLogInsert),
-            supabase.from('progress').upsert(progressUpsert, { onConflict: 'user_id' }),
-            supabase.from('streaks').upsert(streakUpsert, { onConflict: 'user_id' }),
-            supabase.from('leaderboard').upsert(leaderboardUpsert, { onConflict: 'user_id' }),
+            supabase.from('progress').upsert(progressUpsert),
+            supabase.from('streaks').upsert(streakUpsert),
+            supabase.from('leaderboard').upsert(leaderboardUpsert),
             supabase.from('notifications').insert(notificationInsert),
         ]);
 

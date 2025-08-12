@@ -21,7 +21,7 @@ type HomeTab = 'new-case' | 'activity' | 'leaderboard';
 
 
 export interface ChatMessage {
-    sender: 'user' | 'patient';
+    sender: 'user' | 'patient' | 'system';
     text: string;
     timestamp: string;
 }
@@ -119,7 +119,7 @@ const IconSun = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height=
 const IconMoon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>;
 const IconSend = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>;
 const IconPatient = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10Z"/><path d="M19 22v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/></svg>;
-const IconLightbulb = () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg>;
+const IconLightbulb = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg>;
 const IconUser = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>;
 const IconDashboard = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>;
 const IconLogOut = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>;
@@ -131,7 +131,8 @@ const IconBell = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height
 const IconAward = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 17 17 23 15.79 13.88"/></svg>;
 const IconMail = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>;
 const IconChevronLeft = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>;
-
+const IconSettings = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 0 2l-.15.08a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1 0 2l.15.08a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>;
+const IconMapPin = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>;
 
 // --- REACT CONTEXT ---
 interface AppContextType {
@@ -174,13 +175,9 @@ interface AppContextType {
     handleGenerateSoapNote: () => Promise<void>;
     
     // Hint
-    hint: string | null;
     hintCount: number;
-    isGeneratingHint: boolean;
-    hintError: string | null;
-    handleGenerateHint: (chatHistory: ChatMessage[]) => Promise<void>;
-    clearHint: () => void;
     getHintCount: () => number;
+    updateHintCount: (newCount: number) => void;
 
     // Patient Video (now stores video IDs)
     patientVideos: { idle: string | null; talking: string | null };
@@ -254,9 +251,6 @@ const AppContextProvider = ({ children }: { children: ReactNode }) => {
     const [soapNoteError, setSoapNoteError] = useState<string | null>(null);
     
     // Hint State
-    const [hint, setHint] = useState<string | null>(null);
-    const [isGeneratingHint, setIsGeneratingHint] = useState(false);
-    const [hintError, setHintError] = useState<string | null>(null);
     const [hintCount, setHintCount] = useState(MAX_HINTS);
 
     // Video State
@@ -520,36 +514,12 @@ const AppContextProvider = ({ children }: { children: ReactNode }) => {
         localStorage.setItem(HINT_STORAGE_KEY, JSON.stringify({ count: newCount, date: today }));
     };
 
-
-
-    const handleGenerateHint = async (chatHistory: ChatMessage[]) => {
-        if (!currentCase || hintCount <= 0) return;
-        setIsGeneratingHint(true);
-        setHintError(null);
-        setHint(null);
-        try {
-            const newHint = await generateHint(currentCase, chatHistory);
-            setHint(newHint);
-            updateHintCount(hintCount - 1);
-        } catch (error) {
-            console.error("Hint generation failed:", error);
-            setHintError(`Failed to generate hint. ${error instanceof Error ? error.message : "An unknown error occurred."}`);
-        } finally {
-            setIsGeneratingHint(false);
-        }
-    };
-    
-    const clearHint = () => {
-        setHint(null);
-        setHintError(null);
-    }
-
     const value = {
         session, profile, isAuthLoading, authError, streak, score, caseLogs, leaderboard, setProfile, handleSignOut, updateUserTrainingPhase, logCompletedCase,
         page, setPage, homeTab, setHomeTab, theme, toggleTheme, isMobile,
         isGenerating, generationError, generationFilters, currentCase, handleStartNewCase, handleGenerateAndStart, handleRegenerateCase,
         soapNote, isGeneratingSoapNote, soapNoteError, handleGenerateSoapNote,
-        hint, hintCount, isGeneratingHint, hintError, handleGenerateHint, clearHint, getHintCount,
+        hintCount, getHintCount, updateHintCount,
         patientVideos,
         notifications, unreadCount, markNotificationAsRead, markAllNotificationsAsRead
     };
@@ -823,7 +793,12 @@ const AuthPage = () => {
     );
 };
 
-const FilterSidebar = ({ filters, onFilterChange }: { filters: Partial<GenerationFilters>, onFilterChange: React.Dispatch<React.SetStateAction<Partial<GenerationFilters>>> }) => {
+const FilterSidebar = ({ filters, onFilterChange, hideTitle = false, className = '' }: {
+    filters: Partial<GenerationFilters>,
+    onFilterChange: React.Dispatch<React.SetStateAction<Partial<GenerationFilters>>>,
+    hideTitle?: boolean,
+    className?: string
+}) => {
     const [openSections, setOpenSections] = useState<string[]>(['Specialty / System']);
 
     const toggleSection = (section: string) => {
@@ -856,8 +831,8 @@ const FilterSidebar = ({ filters, onFilterChange }: { filters: Partial<Generatio
     };
 
     return (
-        <aside className="filter-sidebar">
-            <h2>Filter Your Case</h2>
+        <aside className={`filter-sidebar ${className}`}>
+            {!hideTitle && <h2>Filter Your Case</h2>}
             <AccordionSectionFilter title="Specialty / System">
                 <div className="checkbox-group">
                     {ALL_SPECIALTIES.map(s => <label key={s}><input type="checkbox" checked={filters.specialties?.includes(s)} onChange={() => handleMultiSelectChange('specialties', s)} />{s}</label>)}
@@ -897,7 +872,7 @@ const CustomCaseSummary = ({ filters, onRemoveFilter }: { filters: Partial<Gener
                         You will be seeing a patient from <strong>{specialties.length > 0 ? specialties.join(', ') : 'any specialty'}</strong> with a focus on <strong>{epas.length > 0 ? epas.join(', ') : 'any EPA'}</strong>.
                     </>
                 ) : (
-                    "You will be seeing a random patient based on your profile. Use the filters on the left to customize."
+                    "You will be seeing a random patient based on your profile. Use the filters to customize."
                 )}
             </p>
             {hasFilters && (
@@ -972,6 +947,7 @@ const NewCaseTab = () => {
         epas: [],
         challengeMode: false,
     });
+    const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
 
     useEffect(() => {
         if (profile?.training_phase) {
@@ -1010,8 +986,15 @@ const NewCaseTab = () => {
 
                 <div className="custom-case-generation">
                     <h2>2. Configure & Start Simulation</h2>
-                    {isMobile && <p>Customize your case using the filters in the full desktop view.</p>}
+                    
                     <CustomCaseSummary filters={filters} onRemoveFilter={handleRemoveFilter} />
+                    
+                    {isMobile && (
+                         <button className="button button-outline filter-button-mobile" onClick={() => setIsFilterModalOpen(true)}>
+                            <IconSettings/> Customize Case
+                         </button>
+                    )}
+
                     <button
                         className="button button-primary generate-button"
                         onClick={handleGenerateClick}
@@ -1024,6 +1007,21 @@ const NewCaseTab = () => {
                     {generationError && <p className="alert alert-error">{generationError}</p>}
                 </div>
             </div>
+
+            {isMobile && isFilterModalOpen && (
+                <ExplanationModal 
+                    title="Customize Your Case" 
+                    onClose={() => setIsFilterModalOpen(false)}
+                    showOkButton={true}
+                >
+                    <FilterSidebar 
+                        filters={filters} 
+                        onFilterChange={setFilters} 
+                        hideTitle={true} 
+                        className="in-modal" 
+                    />
+                </ExplanationModal>
+            )}
         </div>
     );
 };
@@ -1467,27 +1465,35 @@ const DiagnosisPanel = ({
     const { currentCase } = useAppContext();
     if (!currentCase) return <div className="panel actions-panel"><p>Loading...</p></div>;
 
+    const { potentialDiagnoses, correctDiagnosisExplanation } = currentCase;
+    const isRevealed = !!selectedDiagnosis;
+
     return (
         <div className="panel actions-panel">
+            <div className="panel-header">
+                <h3>Potential Diagnoses</h3>
+                <p>Select what you believe is the correct diagnosis.</p>
+            </div>
             <div className="panel-content">
-                <AccordionSection title="Potential Diagnoses" defaultOpen={true}>
-                    <p>Select what you believe is the correct diagnosis.</p>
-                    <div className="choice-options">
-                        {currentCase.potentialDiagnoses.map(({ diagnosis, isCorrect }) => {
-                            const isSelected = selectedDiagnosis === diagnosis;
-                            const isRevealed = !!selectedDiagnosis;
-                            return (
-                                <button key={diagnosis}
-                                    className={`choice-option ${isRevealed && isCorrect ? 'correct' : ''} ${isRevealed && isSelected && !isCorrect ? 'incorrect' : ''}`}
-                                    onClick={() => onSelectDiagnosis(diagnosis)} disabled={isRevealed}>
-                                    {isRevealed && (isCorrect || isSelected) && (isCorrect ? <IconCheck/> : <IconX/>)}
-                                    {diagnosis}
-                                </button>
-                            );
-                        })}
+                <div className="choice-options">
+                    {potentialDiagnoses.map(({ diagnosis, isCorrect }) => {
+                        const isSelected = selectedDiagnosis === diagnosis;
+                        return (
+                            <button key={diagnosis}
+                                className={`choice-option ${isRevealed && isCorrect ? 'correct' : ''} ${isRevealed && isSelected && !isCorrect ? 'incorrect' : ''}`}
+                                onClick={() => onSelectDiagnosis(diagnosis)} disabled={isRevealed}>
+                                {isRevealed && (isCorrect || isSelected) && (isCorrect ? <IconCheck/> : <IconX className="choice-option-icon"/>)}
+                                {diagnosis}
+                            </button>
+                        );
+                    })}
+                </div>
+                {isRevealed && correctDiagnosisExplanation && (
+                    <div className="explanation-box">
+                        <h4>Explanation</h4>
+                        <p>{correctDiagnosisExplanation}</p>
                     </div>
-                    {/* The explanation is now shown in a modal */}
-                </AccordionSection>
+                )}
             </div>
         </div>
     );
@@ -1518,33 +1524,42 @@ const QuestionsPanel = ({
 
     return (
         <div className="panel actions-panel">
+             <div className="panel-header">
+                <h3>Clinical Questions</h3>
+            </div>
             <div className="panel-content">
                 {!selectedDiagnosis ? (
                     <div className="info-box">Please select a diagnosis first to unlock the clinical questions.</div>
                 ) : (
                     <>
-                        <AccordionSection title="Clinical Questions" defaultOpen={true}>
-                            {currentCase.mcqs.length > 0 ? currentCase.mcqs.map((mcq, index) => (
+                        <AccordionSection title="Questions" defaultOpen={true}>
+                            {currentCase.mcqs.length > 0 ? currentCase.mcqs.map((mcq, index) => {
+                                const isRevealed = selectedMcqAnswers[index] !== undefined;
+                                return(
                                 <div key={index} className="mcq-item">
                                     <p><strong>{index + 1}. {mcq.question}</strong></p>
                                     <div className="choice-options">
                                         {mcq.options.map((option, optionIndex) => {
                                             const isSelected = selectedMcqAnswers[index] === optionIndex;
-                                            const isRevealed = selectedMcqAnswers[index] !== undefined;
                                             const isCorrect = mcq.correctAnswerIndex === optionIndex;
                                             return (
                                                 <button key={optionIndex}
                                                     className={`choice-option ${isRevealed && isCorrect ? 'correct' : ''} ${isRevealed && isSelected && !isCorrect ? 'incorrect' : ''}`}
                                                     onClick={() => onSelectMcqAnswer(index, optionIndex)} disabled={isRevealed}>
-                                                    {isRevealed && (isCorrect || isSelected) && (isCorrect ? <IconCheck/> : <IconX/>)}
+                                                    {isRevealed && (isCorrect || isSelected) && (isCorrect ? <IconCheck/> : <IconX className="choice-option-icon"/>)}
                                                     {option}
                                                 </button>
                                             );
                                         })}
                                     </div>
-                                    {/* The explanation is now shown in a modal */}
+                                    {isRevealed && (
+                                        <div className="explanation-box">
+                                            <h4>Explanation</h4>
+                                            <p>{mcq.explanation}</p>
+                                        </div>
+                                    )}
                                 </div>
-                            )) : <p>No clinical questions for this case.</p>}
+                            )}) : <p>No clinical questions for this case.</p>}
                         </AccordionSection>
                         
                         <AccordionSection title="SOAP Note">
@@ -1579,9 +1594,10 @@ const QuestionsPanel = ({
 const MobileCaseInfoView = ({ currentCase }: { currentCase: DiagnosticCase }) => {
     if (!currentCase) return null;
     return (
-        <div className="mobile-case-info-content">
-            <CaseTagsDisplay tags={currentCase.tags} />
+        <div className="case-info-mobile-view">
+            <h2 className="case-title-mobile">{currentCase.title}</h2>
             <p className="case-subtitle">{currentCase.patientProfile.name}, {currentCase.patientProfile.age}, {currentCase.patientProfile.gender}</p>
+            <CaseTagsDisplay tags={currentCase.tags} />
             
             <h3 className="mobile-case-info-heading">Chief Complaint</h3>
             <p className="chief-complaint-text">"{currentCase.chiefComplaint}"</p>
@@ -1598,7 +1614,16 @@ const MobileCaseInfoView = ({ currentCase }: { currentCase: DiagnosticCase }) =>
     );
 };
 
-const SimulationHeaderMobile = ({ activeTab, onTabClick, onBack }: { activeTab: ActiveTab, onTabClick: (tab: ActiveTab) => void, onBack: () => void }) => {
+const SimulationHeaderMobile = ({
+    activeTab, onTabClick, onBack, onRequestHint, hintCount, isGeneratingHint
+}: {
+    activeTab: ActiveTab;
+    onTabClick: (tab: ActiveTab) => void;
+    onBack: () => void;
+    onRequestHint: () => void;
+    hintCount: number;
+    isGeneratingHint: boolean;
+}) => {
     const TABS: ActiveTab[] = useMemo(() => ['case', 'chat', 'diagnosis', 'questions'], []);
 
     return (
@@ -1617,25 +1642,39 @@ const SimulationHeaderMobile = ({ activeTab, onTabClick, onBack }: { activeTab: 
                     </button>
                 ))}
             </div>
-             <div className="header-spacer" aria-hidden="true"></div>
+             <div className="header-spacer">
+                <button 
+                    className="icon-button mobile-hint-button" 
+                    onClick={onRequestHint} 
+                    disabled={isGeneratingHint || hintCount <= 0}
+                    aria-label="Get a hint"
+                >
+                    <IconLightbulb/>
+                    {hintCount > 0 && <span className="mobile-hint-badge">{hintCount}</span>}
+                </button>
+             </div>
         </header>
     )
 };
 
 
 const SimulationPage = () => {
-    const { currentCase, isMobile, setPage, logCompletedCase, getHintCount } = useAppContext();
+    const { 
+        currentCase, isMobile, setPage, logCompletedCase, getHintCount, 
+        hintCount, updateHintCount 
+    } = useAppContext();
     
     // Interaction State
     const [selectedDiagnosis, setSelectedDiagnosis] = useState<string | null>(null);
     const [selectedMcqAnswers, setSelectedMcqAnswers] = useState<Record<number, number>>({});
-    const [explanationModalContent, setExplanationModalContent] = useState<{ title: string; content: string } | null>(null);
     const [activeTab, setActiveTab] = useState<ActiveTab>('chat');
     const [isFinishing, setIsFinishing] = useState(false);
+    const [latestPatientMessage, setLatestPatientMessage] = useState<string | null>(null);
 
     // Chat State
     const [chat, setChat] = useState<Chat | null>(null);
     const [messages, setMessages] = useState<ChatMessage[]>([]);
+    const [isGeneratingHint, setIsGeneratingHint] = useState(false);
     const messagesRef = useRef(messages);
     messagesRef.current = messages;
 
@@ -1646,9 +1685,10 @@ const SimulationPage = () => {
         // Reset all state for new case
         setSelectedDiagnosis(null);
         setSelectedMcqAnswers({});
-        setExplanationModalContent(null);
         setActiveTab('chat');
         setIsFinishing(false);
+        setLatestPatientMessage(null);
+        setIsGeneratingHint(false);
 
         const chatHistoryKey = `chatHistory_${currentCase.title}`;
         let initialMessages: ChatMessage[] = [];
@@ -1680,27 +1720,38 @@ const SimulationPage = () => {
     const handleSelectDiagnosis = (diagnosis: string) => {
         if (!selectedDiagnosis && currentCase) {
             setSelectedDiagnosis(diagnosis);
-            setExplanationModalContent({
-                title: "Explanation",
-                content: currentCase.correctDiagnosisExplanation,
-            });
-            if(isMobile) {
-                // On mobile, keep the modal open but switch the underlying tab
-                setActiveTab('questions');
-            } else {
-                 setActiveTab('questions'); // Auto-switch to questions after diagnosis on desktop too
-            }
+            // On mobile and desktop, auto-switch to the questions tab after diagnosis
+            setActiveTab('questions');
         }
     };
 
     const handleSelectMcqAnswer = (mcqIndex: number, optionIndex: number) => {
         if (selectedMcqAnswers[mcqIndex] === undefined && currentCase) {
             setSelectedMcqAnswers(prev => ({ ...prev, [mcqIndex]: optionIndex }));
-            const mcq = currentCase.mcqs[mcqIndex];
-            setExplanationModalContent({
-                title: `Question ${mcqIndex + 1} Explanation`,
-                content: mcq.explanation,
-            });
+        }
+    };
+
+    const handleRequestHint = async () => {
+        if (!currentCase || hintCount <= 0 || isGeneratingHint) return;
+        setIsGeneratingHint(true);
+        try {
+            const newHint = await generateHint(currentCase, messages);
+            const hintMessage: ChatMessage = {
+                sender: 'system',
+                text: newHint,
+                timestamp: new Date().toISOString()
+            };
+            setMessages(prev => [...prev, hintMessage]);
+            updateHintCount(hintCount - 1);
+        } catch (error) {
+            console.error("Hint generation failed:", error);
+            const errorText = `Sorry, I couldn't generate a hint right now. Please try again.`;
+            const errorMessage: ChatMessage = {
+                sender: 'system', text: errorText, timestamp: new Date().toISOString()
+            };
+            setMessages(prev => [...prev, errorMessage]);
+        } finally {
+            setIsGeneratingHint(false);
         }
     };
 
@@ -1778,67 +1829,52 @@ const SimulationPage = () => {
         }
     };
 
-
-    const handleCloseModal = () => {
-        setExplanationModalContent(null);
-    };
-
-    const handleModalCloseForTab = () => {
-        setActiveTab('chat');
-    };
-
     if (!currentCase) return null;
 
     // --- RENDER LOGIC ---
     if (isMobile) {
-        let modalContent: ReactNode | null = null;
-        let modalTitle = "";
-        
-        switch(activeTab) {
-            case 'case':
-                modalTitle = currentCase.title;
-                modalContent = <MobileCaseInfoView currentCase={currentCase} />;
-                break;
-            case 'diagnosis':
-                modalTitle = "Select Diagnosis";
-                 modalContent = <DiagnosisPanel selectedDiagnosis={selectedDiagnosis} onSelectDiagnosis={handleSelectDiagnosis}/>;
-                break;
-            case 'questions':
-                 modalTitle = "Clinical Questions";
-                 modalContent = <QuestionsPanel
-                    selectedDiagnosis={selectedDiagnosis}
-                    selectedMcqAnswers={selectedMcqAnswers}
-                    onSelectMcqAnswer={handleSelectMcqAnswer}
-                    onFinishCase={handleFinishCase}
-                    isFinishing={isFinishing}
-                />;
-                break;
-        }
-
         return (
-            <main className="app-container simulation-page mobile-view">
-                <PatientVisualizer />
-                <SimulationHeaderMobile activeTab={activeTab} onTabClick={setActiveTab} onBack={() => setPage('home')} />
+            <main className={`app-container simulation-page mobile-view tab-${activeTab}`}>
+                {activeTab === 'chat' && <PatientVisualizer latestPatientMessage={null} />}
+                
+                <SimulationHeaderMobile 
+                    activeTab={activeTab} 
+                    onTabClick={setActiveTab} 
+                    onBack={() => setPage('home')}
+                    onRequestHint={handleRequestHint}
+                    hintCount={hintCount}
+                    isGeneratingHint={isGeneratingHint}
+                />
                 
                 {activeTab === 'chat' && (
                     <ChatWindow 
                         chat={chat}
                         messages={messages}
                         setMessages={setMessages}
+                        setLatestPatientMessage={setLatestPatientMessage}
+                        onRequestHint={handleRequestHint}
+                        isGeneratingHint={isGeneratingHint}
                     />
                 )}
 
-                {activeTab !== 'chat' && modalContent && (
-                    <ExplanationModal title={modalTitle} onClose={handleModalCloseForTab}>
-                        {modalContent}
-                    </ExplanationModal>
-                )}
-
-                {explanationModalContent && (
-                    <ExplanationModal title={explanationModalContent.title} onClose={handleCloseModal} showOkButton>
-                        {explanationModalContent.content}
-                    </ExplanationModal>
-                )}
+                <div className="simulation-content-mobile">
+                    {activeTab === 'case' && <MobileCaseInfoView currentCase={currentCase} />}
+                    {activeTab === 'diagnosis' && 
+                        <DiagnosisPanel 
+                            selectedDiagnosis={selectedDiagnosis}
+                            onSelectDiagnosis={handleSelectDiagnosis}
+                        />
+                    }
+                    {activeTab === 'questions' && 
+                        <QuestionsPanel
+                            selectedDiagnosis={selectedDiagnosis}
+                            selectedMcqAnswers={selectedMcqAnswers}
+                            onSelectMcqAnswer={handleSelectMcqAnswer}
+                            onFinishCase={handleFinishCase}
+                            isFinishing={isFinishing}
+                        />
+                    }
+                </div>
             </main>
         );
     }
@@ -1848,7 +1884,7 @@ const SimulationPage = () => {
         <main className="app-container simulation-page desktop-view">
             <CaseInfoPanel currentCase={currentCase} />
             <div className="central-panel">
-                <PatientVisualizer />
+                <PatientVisualizer latestPatientMessage={latestPatientMessage} />
             </div>
             <div className="right-panel">
                 <div className="tab-nav">
@@ -1862,6 +1898,9 @@ const SimulationPage = () => {
                         chat={chat}
                         messages={messages}
                         setMessages={setMessages}
+                        setLatestPatientMessage={setLatestPatientMessage}
+                        onRequestHint={handleRequestHint}
+                        isGeneratingHint={isGeneratingHint}
                     />
                 )}
                 {activeTab === 'diagnosis' && (
@@ -1880,21 +1919,12 @@ const SimulationPage = () => {
                     />
                 )}
             </div>
-            {explanationModalContent && (
-                <ExplanationModal 
-                    title={explanationModalContent.title}
-                    onClose={handleCloseModal}
-                    showOkButton
-                >
-                    {explanationModalContent.content}
-                </ExplanationModal>
-            )}
         </main>
     );
 };
 
 
-const PatientVisualizer = () => {
+const PatientVisualizer = ({ latestPatientMessage }: { latestPatientMessage: string | null }) => {
     const { currentCase, patientVideos } = useAppContext();
     const [isSpeaking, setIsSpeaking] = useState(false);
     const [playersReady, setPlayersReady] = useState({ idle: false, talking: false });
@@ -1998,17 +2028,23 @@ const PatientVisualizer = () => {
                     </div>
                 </div>
             )}
+            {latestPatientMessage && (
+                <p className="patient-message-overlay">{latestPatientMessage}</p>
+            )}
         </div>
     );
 };
 
-const ChatWindow = ({ chat, messages, setMessages }: {
+const ChatWindow = ({ chat, messages, setMessages, setLatestPatientMessage, onRequestHint, isGeneratingHint }: {
     chat: Chat | null;
     messages: ChatMessage[];
     setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
+    setLatestPatientMessage: (message: string | null) => void;
+    onRequestHint: () => void;
+    isGeneratingHint: boolean;
 }) => {
     const { 
-        currentCase, handleGenerateHint, hint, hintCount, isGeneratingHint, hintError, clearHint, profile, isMobile
+        currentCase, hintCount, isMobile, profile
     } = useAppContext();
     
     const [userInput, setUserInput] = useState('');
@@ -2151,18 +2187,22 @@ const ChatWindow = ({ chat, messages, setMessages }: {
         setMessages(prev => [...prev, userMessage]);
         setUserInput('');
         setIsLoading(true);
+        setLatestPatientMessage('...');
 
         try {
             const response = await chat.sendMessage({ message: userInput });
             const patientMessage: ChatMessage = { sender: 'patient', text: response.text, timestamp: new Date().toISOString() };
             setMessages(prev => [...prev, patientMessage]);
+            setLatestPatientMessage(response.text);
             if(currentCase?.patientProfile) {
                 speak(response.text, currentCase.patientProfile.age, currentCase.patientProfile.gender);
             }
         } catch (error) {
             console.error('Error sending message:', error);
-            const errorMessage: ChatMessage = { sender: 'patient', text: `Sorry, I'm having trouble communicating. (${error instanceof Error ? error.message : "Unknown error"})`, timestamp: new Date().toISOString() };
+            const errorText = `Sorry, I'm having trouble communicating. (${error instanceof Error ? error.message : "Unknown error"})`;
+            const errorMessage: ChatMessage = { sender: 'patient', text: errorText, timestamp: new Date().toISOString() };
             setMessages(prev => [...prev, errorMessage]);
+            setLatestPatientMessage(errorText);
         } finally {
             setIsLoading(false);
         }
@@ -2190,34 +2230,41 @@ const ChatWindow = ({ chat, messages, setMessages }: {
                     </div>
                     <div className="hint-button-container">
                         <span className="hint-count" title={`${hintCount} hints remaining`}>{hintCount}</span>
-                        <button className="button button-outline" onClick={() => handleGenerateHint(messages)}
-                            disabled={isGeneratingHint || hintCount <= 0} title="Get a hint">
-                            {isGeneratingHint ? <div className="loading-spinner"></div> : <IconLightbulb />} Get Hint
+                        <button className="button button-outline" onClick={onRequestHint}
+                            disabled={isGeneratingHint || hintCount <= 0} title={hintCount > 0 ? "Get a hint" : "No hints remaining"}>
+                             <IconLightbulb /> Get Hint
                         </button>
                     </div>
                 </div>
             )}
            
             <div className="chat-messages">
-                {messages.length === 0 ? <div className="chat-empty-state">No messages yet. Start the conversation.</div> : messages.map((msg, index) => (
-                    <div key={index} className={`chat-message message-${msg.sender}`}>
-                        <div className="avatar-icon">
-                           {msg.sender === 'user' ? (
-                                <div className="profile-avatar-chat">{getInitials(profile?.full_name)}</div>
-                            ) : (
-                                <IconPatient />
-                            )}
+                {messages.length === 0 ? <div className="chat-empty-state">No messages yet. Start the conversation.</div> : messages.map((msg, index) => {
+                    if (msg.sender === 'system') {
+                        return (
+                            <div key={index} className="chat-message message-system">
+                                <div className="avatar-icon hint-icon"><IconMapPin /></div>
+                                <div className="chat-bubble">{msg.text}</div>
+                            </div>
+                        );
+                    }
+                    return (
+                        <div key={index} className={`chat-message message-${msg.sender}`}>
+                            <div className="avatar-icon">
+                               {msg.sender === 'user' ? (
+                                    <div className="profile-avatar-chat">{getInitials(profile?.full_name)}</div>
+                                ) : (
+                                    <IconPatient />
+                                )}
+                            </div>
+                            <div className="chat-bubble">{msg.text}</div>
                         </div>
-                        <div className="chat-bubble">{msg.text}</div>
-                    </div>
-                ))}
+                    );
+                })}
                 {isLoading && <div className="chat-message message-patient"><div className="avatar-icon"><IconPatient /></div><div className="chat-bubble">Thinking...</div></div>}
                 <div ref={messagesEndRef} />
             </div>
 
-            {(hint || hintError) && (
-                <div className="hint-display"><IconLightbulb /><span>{hint || hintError}</span><button className="close-button" onClick={clearHint}><IconClose /></button></div>
-            )}
             {speechError && (
                  <div className="speech-alert"><IconAlertTriangle /><span>{speechError}</span><button className="close-button" onClick={() => setSpeechError(null)}><IconClose /></button></div>
             )}
