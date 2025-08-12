@@ -4,8 +4,8 @@
 */
 import React, { useState, useEffect, useCallback, useRef, StrictMode, ReactNode, createContext, useContext, useMemo } from 'react';
 import { createRoot } from 'react-dom/client';
-import { generateCase, createChatForCase, DiagnosticCase, MCQ, generateSoapNoteForCase, generateHint, CaseTags, GenerationFilters, pickSpecialtyForCase, pickBestVideo, Chat } from './services/geminiService';
-import { supabase, signIn, signUp, signOut, getUserProfile, updateUserProfile, getCaseLogs, logCaseCompletion as supabaseLogCaseCompletion, getLeaderboard, getStreak, Profile, Streak, CaseLog, getUserScore, getNotifications, markNotificationAsRead as supabaseMarkNotificationAsRead, markAllNotificationsAsRead as supabaseMarkAllNotificationsAsRead, Notification, NotificationType } from './services/supabaseService';
+import { generateCase, createChatForCase, DiagnosticCase, MCQ, generateSoapNoteForCase, generateHint, CaseTags, GenerationFilters, pickSpecialtyForCase, pickBestVideo, Chat, evaluateChatForEPAs, EPAScore } from './services/geminiService';
+import { supabase, signIn, signUp, signOut, getUserProfile, updateUserProfile, getCaseLogs, logCaseCompletion as supabaseLogCaseCompletion, getLeaderboard, getStreak, Profile, Streak, CaseLog, LeaderboardEntry, getUserScore, getNotifications, markNotificationAsRead as supabaseMarkNotificationAsRead, markAllNotificationsAsRead as supabaseMarkAllNotificationsAsRead, Notification, NotificationType } from './services/supabaseService';
 import { Session, User } from '@supabase/supabase-js';
 
 
@@ -16,11 +16,11 @@ type CognitiveSkill = 'Recall' | 'Application' | 'Analysis';
 type EPA = 'History-taking' | 'Physical Exam' | 'Diagnosis' | 'Management';
 type Page = 'home' | 'simulation';
 type Theme = 'light' | 'dark';
-type ActiveTab = 'chat' | 'diagnosis' | 'questions';
+type ActiveTab = 'chat' | 'diagnosis' | 'questions' | 'case';
 type HomeTab = 'new-case' | 'activity' | 'leaderboard';
 
 
-interface ChatMessage {
+export interface ChatMessage {
     sender: 'user' | 'patient';
     text: string;
     timestamp: string;
@@ -102,6 +102,8 @@ const IconMicroscope = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" 
 const IconStethoscope = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4a2 2 0 1 0 4 0a2 2 0 1 0-4 0"/><path d="M8 4h1a2 2 0 0 1 2 2v2a4 4 0 0 1-4 4H5a2 2 0 0 0-2 2v2a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2v-4a2 2 0 0 0-2-2h-1"/><path d="M17 4a2 2 0 1 0 4 0a2 2 0 1 0-4 0"/></svg>;
 const IconGraduationCap = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.42 10.922a1 1 0 0 0-.019-1.838L12.83 5.18a2 2 0 0 0-1.66 0L2.6 9.08a1 1 0 0 0 0 1.832l8.57 3.908a2 2 0 0 0 1.66 0z"/><path d="M22 10v6"/><path d="M6 12.5V16a6 6 0 0 0 12 0v-3.5"/></svg>;
 const IconBriefcase = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="14" x="2" y="7" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>;
+const IconPlus = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>;
+const IconMenu = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>;
 const IconMessage = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg>;
 const IconVolume = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/></svg>;
 const IconVolumeOff = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 5 6 9H2v6h4l5 5V5z"/><path d="m23 9-6 6M17 9l6 6"/></svg>;
@@ -110,6 +112,7 @@ const IconAlertTriangle = ({ className }: { className?: string }) => <svg classN
 const IconCheck = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>;
 const IconX = ({className}: {className?: string}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>;
 const IconChevronDown = ({ className }: { className?: string }) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>;
+const IconChevronUp = ({ className }: { className?: string }) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>;
 const IconHome = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>;
 const IconRefresh = () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></svg>;
 const IconSun = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>;
@@ -127,6 +130,7 @@ const IconFileText = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" he
 const IconBell = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>;
 const IconAward = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 17 17 23 15.79 13.88"/></svg>;
 const IconMail = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>;
+const IconChevronLeft = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>;
 
 
 // --- REACT CONTEXT ---
@@ -139,7 +143,7 @@ interface AppContextType {
     streak: Streak | null;
     score: number | null;
     caseLogs: CaseLog[];
-    leaderboard: any[];
+    leaderboard: LeaderboardEntry[];
     setProfile: (profile: Profile | null) => void;
     handleSignOut: () => void;
     updateUserTrainingPhase: (trainingPhase: TrainingPhase) => Promise<void>;
@@ -176,6 +180,7 @@ interface AppContextType {
     hintError: string | null;
     handleGenerateHint: (chatHistory: ChatMessage[]) => Promise<void>;
     clearHint: () => void;
+    getHintCount: () => number;
 
     // Patient Video (now stores video IDs)
     patientVideos: { idle: string | null; talking: string | null };
@@ -214,6 +219,11 @@ const timeAgo = (isoDate: string): string => {
     return `${Math.floor(seconds)}s ago`;
 };
 
+const getInitials = (name: string | null | undefined) => {
+    if (!name) return 'U';
+    return name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase();
+}
+
 
 const AppContextProvider = ({ children }: { children: ReactNode }) => {
     // Auth & Profile State
@@ -224,7 +234,7 @@ const AppContextProvider = ({ children }: { children: ReactNode }) => {
     const [streak, setStreak] = useState<Streak | null>(null);
     const [score, setScore] = useState<number | null>(null);
     const [caseLogs, setCaseLogs] = useState<CaseLog[]>([]);
-    const [leaderboard, setLeaderboard] = useState<any[]>([]);
+    const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
 
     // App State
     const [page, setPage] = useState<Page>('home');
@@ -249,8 +259,9 @@ const AppContextProvider = ({ children }: { children: ReactNode }) => {
     const [hintError, setHintError] = useState<string | null>(null);
     const [hintCount, setHintCount] = useState(MAX_HINTS);
 
-    // Video State (stores video IDs)
+    // Video State
     const [patientVideos, setPatientVideos] = useState<{ idle: string | null; talking: string | null }>({ idle: null, talking: null });
+
 
     // Notification State
     const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -259,6 +270,18 @@ const AppContextProvider = ({ children }: { children: ReactNode }) => {
     const toggleTheme = () => {
         setTheme(prev => (prev === 'light' ? 'dark' : 'light'));
     };
+    
+    const getHintCount = useCallback(() => {
+        try {
+            const savedHintUsage = localStorage.getItem(HINT_STORAGE_KEY);
+            const today = new Date().toISOString().split('T')[0];
+            if (savedHintUsage) {
+                const { count, date } = JSON.parse(savedHintUsage);
+                if (date === today) return count;
+            }
+        } catch (error) { console.error("Failed to get hint count", error); }
+        return MAX_HINTS;
+    }, []);
 
     const fetchAllUserData = async (user: User) => {
         try {
@@ -338,23 +361,13 @@ const AppContextProvider = ({ children }: { children: ReactNode }) => {
         // Load Theme & Hint Count
         const savedTheme = localStorage.getItem('theme') as Theme;
         if (savedTheme) setTheme(savedTheme);
-        try {
-            const savedHintUsage = localStorage.getItem(HINT_STORAGE_KEY);
-            const today = new Date().toISOString().split('T')[0];
-            if (savedHintUsage) {
-                const { count, date } = JSON.parse(savedHintUsage);
-                if (date === today) setHintCount(count);
-                else localStorage.setItem(HINT_STORAGE_KEY, JSON.stringify({ count: MAX_HINTS, date: today }));
-            } else {
-                localStorage.setItem(HINT_STORAGE_KEY, JSON.stringify({ count: MAX_HINTS, date: today }));
-            }
-        } catch (error) { console.error("Failed to process hint usage", error); }
+        setHintCount(getHintCount());
 
         return () => {
             authListener.subscription.unsubscribe();
             window.removeEventListener('resize', handleResize);
         }
-    }, []);
+    }, [getHintCount]);
 
     useEffect(() => {
         document.documentElement.setAttribute('data-theme', theme);
@@ -446,8 +459,9 @@ const AppContextProvider = ({ children }: { children: ReactNode }) => {
         }
         setCurrentCase(caseData);
         setSoapNote(null);
+        setHintCount(getHintCount()); // Reset hint count for new case from storage
         setPage('simulation');
-    }, []);
+    }, [getHintCount]);
 
     const handleGenerateAndStart = async (filters: GenerationFilters) => {
         setGenerationFilters(filters);
@@ -535,7 +549,7 @@ const AppContextProvider = ({ children }: { children: ReactNode }) => {
         page, setPage, homeTab, setHomeTab, theme, toggleTheme, isMobile,
         isGenerating, generationError, generationFilters, currentCase, handleStartNewCase, handleGenerateAndStart, handleRegenerateCase,
         soapNote, isGeneratingSoapNote, soapNoteError, handleGenerateSoapNote,
-        hint, hintCount, isGeneratingHint, hintError, handleGenerateHint, clearHint,
+        hint, hintCount, isGeneratingHint, hintError, handleGenerateHint, clearHint, getHintCount,
         patientVideos,
         notifications, unreadCount, markNotificationAsRead, markAllNotificationsAsRead
     };
@@ -629,11 +643,6 @@ const ProfileMenu = () => {
     const [isOpen, setIsOpen] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
 
-    const getInitials = (name: string | null | undefined) => {
-        if (!name) return 'U';
-        return name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase();
-    }
-
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
@@ -673,7 +682,19 @@ const ProfileMenu = () => {
 }
 
 const AppHeader = () => {
-    const { session, setPage } = useAppContext();
+    const { session, setPage, isMobile } = useAppContext();
+    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+    const menuRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+                setIsMobileMenuOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
 
     return (
         <header className="app-header">
@@ -685,9 +706,18 @@ const AppHeader = () => {
                  </button>
             </div>
             <div className="app-header-right">
-                {session && <button className="button button-outline home-button-header" onClick={() => setPage('home')}><IconHome/> <span>Home</span></button>}
+                {session && !isMobile && <button className="button button-outline home-button-header" onClick={() => setPage('home')}><IconHome/> <span>Home</span></button>}
                 {session && <NotificationMenu />}
-                {session ? <ProfileMenu /> : <div/>}
+                {session && !isMobile && <ProfileMenu />}
+                {session && isMobile && (
+                    <div className="mobile-header-menu" ref={menuRef}>
+                        <button className="icon-button" onClick={() => setIsMobileMenuOpen(prev => !prev)} aria-label="Open menu" aria-haspopup="true" aria-expanded={isMobileMenuOpen}>
+                            <IconMenu />
+                        </button>
+                        {isMobileMenuOpen && <ProfileMenu />}
+                    </div>
+                )}
+                 {!session && <div/>}
             </div>
         </header>
     );
@@ -935,7 +965,7 @@ const TrainingPhaseSelector = () => {
 
 
 const NewCaseTab = () => {
-    const { profile, handleGenerateAndStart, isGenerating, generationError } = useAppContext();
+    const { profile, handleGenerateAndStart, isGenerating, generationError, isMobile } = useAppContext();
     const [filters, setFilters] = useState<Partial<GenerationFilters>>({
         trainingPhase: profile?.training_phase || undefined,
         specialties: [],
@@ -969,7 +999,7 @@ const NewCaseTab = () => {
 
     return (
         <div className="generation-section">
-            <FilterSidebar filters={filters} onFilterChange={setFilters} />
+            {!isMobile && <FilterSidebar filters={filters} onFilterChange={setFilters} />}
 
             <div className="generation-main-content">
                 <div className="training-phase-section">
@@ -980,8 +1010,14 @@ const NewCaseTab = () => {
 
                 <div className="custom-case-generation">
                     <h2>2. Configure & Start Simulation</h2>
+                    {isMobile && <p>Customize your case using the filters in the full desktop view.</p>}
                     <CustomCaseSummary filters={filters} onRemoveFilter={handleRemoveFilter} />
-                    <button className="button button-primary generate-button" onClick={handleGenerateClick} disabled={isGenerating || !profile?.training_phase}>
+                    <button
+                        className="button button-primary generate-button"
+                        onClick={handleGenerateClick}
+                        disabled={isGenerating || !profile?.training_phase}
+                        title={!profile?.training_phase ? "Please select a training phase first" : "Start a new case"}
+                    >
                         {isGenerating ? <div className="loading-spinner"></div> : "Chat with Patient"}
                     </button>
                     {!profile?.training_phase && <p className="alert alert-inline">Please select a training phase to start.</p>}
@@ -999,18 +1035,10 @@ const ActivityLogTab = () => {
         return <div className="empty-state">You haven't completed any cases yet. Go to the "New Case" tab to start one!</div>;
     }
 
-    const getPerformanceScore = (mcqCorrect: number, mcqTotal: number) => {
-        if (mcqTotal === 0) {
-            return { displayScore: "N/A", className: "" };
-        }
-        // Scale: 0% correct -> 1.0, 100% correct -> 10.0
-        const score = 1.0 + ((mcqCorrect / mcqTotal) * 9.0);
-        
-        let className = 'high';
-        if (score < 4.0) className = 'low';
-        else if (score < 7.5) className = 'medium';
-
-        return { displayScore: score.toFixed(1), className };
+    const getScoreClass = (score: number) => {
+        if (score < 4.0) return 'low';
+        if (score < 7.5) return 'medium';
+        return 'high';
     };
 
     return (
@@ -1028,13 +1056,18 @@ const ActivityLogTab = () => {
                     {caseLogs.slice().reverse().map(log => {
                         let details;
                         try {
-                            details = JSON.parse(log.case_details as string);
+                            // Check if case_details is a string, and parse if so.
+                            if (typeof log.case_details === 'string') {
+                                details = JSON.parse(log.case_details);
+                            } else {
+                                details = log.case_details; // Assume it's already an object
+                            }
                         } catch (e) {
                             console.error("Failed to parse case_details", log.case_details);
-                            details = { mcqCorrectCount: 0, mcqTotal: 0, diagnosisCorrect: false }; // Fallback
+                            details = { diagnosisCorrect: false }; // Fallback
                         }
                         
-                        const { displayScore, className } = getPerformanceScore(details.mcqCorrectCount, details.mcqTotal);
+                        const scoreClass = getScoreClass(log.score);
                         
                         return (
                             <tr key={log.id}>
@@ -1045,14 +1078,8 @@ const ActivityLogTab = () => {
                                     </span>
                                 </td>
                                 <td data-label="Performance Score">
-                                    {displayScore !== "N/A" ? (
-                                        <>
-                                            <span className={`score-value ${className}`}>{displayScore}</span>
-                                            <span className="score-range">(1.0 - 10.0)</span>
-                                        </>
-                                    ) : (
-                                        "N/A"
-                                    )}
+                                    <span className={`score-value ${scoreClass}`}>{log.score.toFixed(1)}</span>
+                                    <span className="score-range">(0.0 - 10.0)</span>
                                 </td>
                                 <td data-label="Completed On">{new Date(log.created_at).toLocaleDateString()}</td>
                             </tr>
@@ -1101,7 +1128,7 @@ const LeaderboardTab = () => {
 
 
 const DashboardMetrics = () => {
-    const { streak, caseLogs, score } = useAppContext();
+    const { streak, caseLogs, score, isMobile } = useAppContext();
     return (
         <div className="dashboard-metrics">
             <div className="metric-card">
@@ -1129,35 +1156,138 @@ const DashboardMetrics = () => {
     );
 }
 
-const HomePage = () => {
-    const { profile, homeTab, setHomeTab } = useAppContext();
+const LeaderboardHighlight = () => {
+    const { leaderboard, profile } = useAppContext();
+    const topThree = leaderboard.slice(0, 3);
 
     return (
-        <main className="app-container home-page">
+        <div className="leaderboard-highlight">
+            {topThree.map((entry, index) => (
+                <div key={entry.user_id} className={`leaderboard-highlight-item rank-${index + 1}`}>
+                    <div className="highlight-rank">#{index + 1}</div>
+                    <div className="highlight-info">
+                        <div className="highlight-name">{entry.profiles?.full_name}{profile?.id === entry.user_id ? ' (You)' : ''}</div>
+                        <div className="highlight-score">{entry.score.toFixed(1)} pts</div>
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
+}
+
+const HomePageSidebar = () => {
+    const { leaderboard } = useAppContext();
+    return (
+        <aside className="home-page-sidebar">
+            <h3>Leaderboard</h3>
+            {leaderboard.length > 0 ? (
+                <LeaderboardHighlight />
+            ) : (
+                <p>No rankings yet. Complete a case to get on the board!</p>
+            )}
+        </aside>
+    )
+}
+
+const BottomNavBar = () => {
+    const { homeTab, setHomeTab } = useAppContext();
+    return (
+        <div className="bottom-nav-bar">
+            <nav>
+                <button className={`nav-item ${homeTab === 'new-case' ? 'active' : ''}`} onClick={() => setHomeTab('new-case')}>
+                    <IconStethoscope/>
+                    <span>New Case</span>
+                </button>
+                <button id="activity" className={`nav-item ${homeTab === 'activity' ? 'active' : ''}`} onClick={() => setHomeTab('activity')}>
+                    <IconFileText/>
+                    <span>Activity</span>
+                </button>
+                 <button id="leaderboard" className={`nav-item ${homeTab === 'leaderboard' ? 'active' : ''}`} onClick={() => setHomeTab('leaderboard')}>
+                    <IconTrophy/>
+                    <span>Ranks</span>
+                </button>
+            </nav>
+        </div>
+    )
+}
+
+const FAB = () => {
+    const { setHomeTab } = useAppContext();
+    // This FAB is a shortcut to the primary action on the "New Case" tab
+    const handleFabClick = () => {
+       setHomeTab('new-case');
+       const generateButton = document.querySelector('.generate-button');
+       if (generateButton) {
+           generateButton.scrollIntoView({ behavior: 'smooth', block: 'center' });
+       }
+    }
+    return (
+        <button className="fab" onClick={handleFabClick} aria-label="Start New Case">
+            <IconStethoscope/>
+        </button>
+    )
+}
+
+
+const HomePage = () => {
+    const { profile, homeTab, setHomeTab, isMobile } = useAppContext();
+
+    const renderContent = () => {
+        switch(homeTab) {
+            case 'activity': return <ActivityLogTab />;
+            case 'leaderboard': return <LeaderboardTab />;
+            case 'new-case':
+            default:
+                return <NewCaseTab />;
+        }
+    }
+
+    if (isMobile) {
+        return (
+            <main className="app-container home-page mobile-view">
+                <div className="home-header">
+                    <h1>Welcome, {profile?.full_name?.split(' ')[0] || 'Doctor'}!</h1>
+                </div>
+                <DashboardMetrics />
+                <div className="home-content-mobile">
+                    {renderContent()}
+                </div>
+                {homeTab === 'new-case' && <FAB />}
+                <BottomNavBar />
+            </main>
+        )
+    }
+
+    return (
+        <main className="app-container home-page desktop-view">
             <div className="home-header">
                 <h1>Welcome back, {profile?.full_name?.split(' ')[0] || 'Doctor'}!</h1>
                 <p>Your patient just walked in. Time to begin diagnosis.</p>
             </div>
             
-            <DashboardMetrics />
-            
-            <div className="home-content-wrapper">
-                <div className="home-tab-nav">
-                    <button className={`tab-nav-button ${homeTab === 'new-case' ? 'active' : ''}`} onClick={() => setHomeTab('new-case')}>
-                        <IconStethoscope/> New Case
-                    </button>
-                    <button id="activity" className={`tab-nav-button ${homeTab === 'activity' ? 'active' : ''}`} onClick={() => setHomeTab('activity')}>
-                        <IconFileText/> My Activity
-                    </button>
-                     <button id="leaderboard" className={`tab-nav-button ${homeTab === 'leaderboard' ? 'active' : ''}`} onClick={() => setHomeTab('leaderboard')}>
-                        <IconTrophy/> Leaderboard
-                    </button>
+            <div className="home-page-layout">
+                <div className="home-page-left">
+                    <DashboardMetrics />
                 </div>
-                
-                <div className="home-content">
-                    {homeTab === 'new-case' && <NewCaseTab />}
-                    {homeTab === 'activity' && <ActivityLogTab />}
-                    {homeTab === 'leaderboard' && <LeaderboardTab />}
+                <div className="home-page-main">
+                    <div className="home-tab-nav">
+                        <button className={`tab-nav-button ${homeTab === 'new-case' ? 'active' : ''}`} onClick={() => setHomeTab('new-case')}>
+                            <IconStethoscope/> New Case
+                        </button>
+                        <button id="activity" className={`tab-nav-button ${homeTab === 'activity' ? 'active' : ''}`} onClick={() => setHomeTab('activity')}>
+                            <IconFileText/> My Activity
+                        </button>
+                        <button id="leaderboard" className={`tab-nav-button ${homeTab === 'leaderboard' ? 'active' : ''}`} onClick={() => setHomeTab('leaderboard')}>
+                            <IconTrophy/> Leaderboard
+                        </button>
+                    </div>
+                    
+                    <div className="home-content">
+                       {renderContent()}
+                    </div>
+                </div>
+                <div className="home-page-right">
+                    <HomePageSidebar />
                 </div>
             </div>
         </main>
@@ -1238,7 +1368,7 @@ const ExplanationModal = ({ title, children, icon, iconType = 'info', onClose, s
     }, [onClose]);
 
     return (
-        <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+        <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title" onClick={onClose}>
             <div className="modal-content" onClick={(e) => e.stopPropagation()}>
                 <div className="modal-header">
                     <h2 id="modal-title">{title}</h2>
@@ -1248,7 +1378,7 @@ const ExplanationModal = ({ title, children, icon, iconType = 'info', onClose, s
                 </div>
                 <div className="modal-body">
                     {icon && <div className={`modal-icon-wrapper modal-icon-${iconType}`}>{icon}</div>}
-                    <p style={{ whiteSpace: 'pre-wrap', textAlign: icon ? 'center' : 'left' }}>{children}</p>
+                    <div style={{ whiteSpace: 'pre-wrap', textAlign: icon ? 'center' : 'left' }}>{children}</div>
                 </div>
                 {showOkButton && (
                     <div className="modal-footer">
@@ -1366,57 +1496,26 @@ const DiagnosisPanel = ({
 const QuestionsPanel = ({
     selectedDiagnosis,
     selectedMcqAnswers,
-    onSelectMcqAnswer
+    onSelectMcqAnswer,
+    onFinishCase,
+    isFinishing
 }: {
     selectedDiagnosis: string | null;
     selectedMcqAnswers: Record<number, number>;
     onSelectMcqAnswer: (mcqIndex: number, optionIndex: number) => void;
+    onFinishCase: () => void;
+    isFinishing: boolean;
 }) => {
     const {
         currentCase,
-        soapNote, isGeneratingSoapNote, soapNoteError, handleGenerateSoapNote,
-        logCompletedCase, setPage
+        soapNote, isGeneratingSoapNote, soapNoteError, handleGenerateSoapNote
     } = useAppContext();
 
     if (!currentCase) return <div className="panel actions-panel"><p>Loading...</p></div>;
 
     const allMcqsAnswered = currentCase.mcqs.length > 0 && Object.keys(selectedMcqAnswers).length === currentCase.mcqs.length;
+    const canFinish = allMcqsAnswered || currentCase.mcqs.length === 0;
 
-    const handleFinishCase = () => {
-        if (!currentCase) return;
-        const diagnosisCorrect = currentCase.potentialDiagnoses.find(d => d.diagnosis === selectedDiagnosis)?.isCorrect || false;
-        const mcqCorrectCount = Object.entries(selectedMcqAnswers).filter(([idx, answer]) =>
-            currentCase.mcqs[parseInt(idx)].correctAnswerIndex === answer
-        ).length;
-        const mcqTotal = currentCase.mcqs.length;
-
-        const caseResultDetails = {
-            diagnosisCorrect,
-            mcqCorrectCount,
-            mcqTotal: mcqTotal,
-        };
-        
-        // New scoring system from 0 to 10
-        let newScore = 0;
-        if (diagnosisCorrect) {
-            newScore += 5;
-        }
-
-        if (mcqTotal > 0) {
-            newScore += 5 * (mcqCorrectCount / mcqTotal);
-        } else if (diagnosisCorrect) {
-            // If there are no MCQs, a correct diagnosis is worth full points
-            newScore = 10;
-        }
-        
-        logCompletedCase({
-            case_title: currentCase.title,
-            case_details: JSON.stringify(caseResultDetails),
-            score: newScore,
-        });
-        setPage('home');
-    };
-    
     return (
         <div className="panel actions-panel">
             <div className="panel-content">
@@ -1462,9 +1561,12 @@ const QuestionsPanel = ({
                             )}
                         </AccordionSection>
 
-                        {allMcqsAnswered && (
+                        {canFinish && (
                            <div className="finish-case-action">
-                             <button className="button button-primary" onClick={handleFinishCase}>Finish Case & Return Home</button>
+                             <button className="button button-primary" onClick={onFinishCase} disabled={isFinishing}>
+                               {isFinishing && <div className="loading-spinner"></div>}
+                               Finish Case & See Score
+                             </button>
                            </div>
                         )}
                     </>
@@ -1474,29 +1576,120 @@ const QuestionsPanel = ({
     );
 };
 
+const MobileCaseInfoView = ({ currentCase }: { currentCase: DiagnosticCase }) => {
+    if (!currentCase) return null;
+    return (
+        <div className="mobile-case-info-content">
+            <CaseTagsDisplay tags={currentCase.tags} />
+            <p className="case-subtitle">{currentCase.patientProfile.name}, {currentCase.patientProfile.age}, {currentCase.patientProfile.gender}</p>
+            
+            <h3 className="mobile-case-info-heading">Chief Complaint</h3>
+            <p className="chief-complaint-text">"{currentCase.chiefComplaint}"</p>
+            
+            <h3 className="mobile-case-info-heading">History of Present Illness</h3>
+            <p>{currentCase.historyOfPresentIllness}</p>
+            
+            <h3 className="mobile-case-info-heading">Physical Exam</h3>
+            <p style={{ whiteSpace: 'pre-wrap' }}>{currentCase.physicalExam}</p>
+            
+            <h3 className="mobile-case-info-heading">Lab Results</h3>
+            <p style={{ whiteSpace: 'pre-wrap' }}>{currentCase.labResults}</p>
+        </div>
+    );
+};
+
+const SimulationHeaderMobile = ({ activeTab, onTabClick, onBack }: { activeTab: ActiveTab, onTabClick: (tab: ActiveTab) => void, onBack: () => void }) => {
+    const TABS: ActiveTab[] = useMemo(() => ['case', 'chat', 'diagnosis', 'questions'], []);
+
+    return (
+        <header className="simulation-header-mobile">
+            <button onClick={onBack} className="back-button" aria-label="Go back">
+                <IconChevronLeft />
+            </button>
+            <div className="sim-tabs-container">
+                 {TABS.map(tab => (
+                    <button 
+                        key={tab} 
+                        className={`sim-tab-button ${activeTab === tab ? 'active' : ''}`} 
+                        onClick={() => onTabClick(tab)}
+                    >
+                        {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                    </button>
+                ))}
+            </div>
+             <div className="header-spacer" aria-hidden="true"></div>
+        </header>
+    )
+};
+
+
 const SimulationPage = () => {
-    const { currentCase } = useAppContext();
+    const { currentCase, isMobile, setPage, logCompletedCase, getHintCount } = useAppContext();
+    
+    // Interaction State
     const [selectedDiagnosis, setSelectedDiagnosis] = useState<string | null>(null);
     const [selectedMcqAnswers, setSelectedMcqAnswers] = useState<Record<number, number>>({});
-    const [activeTab, setActiveTab] = useState<ActiveTab>('chat');
     const [explanationModalContent, setExplanationModalContent] = useState<{ title: string; content: string } | null>(null);
+    const [activeTab, setActiveTab] = useState<ActiveTab>('chat');
+    const [isFinishing, setIsFinishing] = useState(false);
 
+    // Chat State
+    const [chat, setChat] = useState<Chat | null>(null);
+    const [messages, setMessages] = useState<ChatMessage[]>([]);
+    const messagesRef = useRef(messages);
+    messagesRef.current = messages;
+
+    // Load chat state from localStorage and initialize chat instance
     useEffect(() => {
-        // Reset state when case changes
+        if (!currentCase) return;
+
+        // Reset all state for new case
         setSelectedDiagnosis(null);
         setSelectedMcqAnswers({});
-        setActiveTab('chat');
         setExplanationModalContent(null);
+        setActiveTab('chat');
+        setIsFinishing(false);
+
+        const chatHistoryKey = `chatHistory_${currentCase.title}`;
+        let initialMessages: ChatMessage[] = [];
+        try {
+            const savedMessages = localStorage.getItem(chatHistoryKey);
+            if (savedMessages) {
+                initialMessages = JSON.parse(savedMessages);
+            }
+        } catch (error) {
+            console.error("Failed to parse chat history from localStorage. Clearing it.", error);
+            localStorage.removeItem(chatHistoryKey);
+        }
+        setMessages(initialMessages);
+        
+        const chatInstance = createChatForCase(currentCase);
+        setChat(chatInstance);
+
+        // Save history on unmount
+        return () => {
+            if (messagesRef.current.length > 0) {
+                localStorage.setItem(chatHistoryKey, JSON.stringify(messagesRef.current));
+            } else {
+                localStorage.removeItem(chatHistoryKey);
+            }
+        };
     }, [currentCase]);
+
 
     const handleSelectDiagnosis = (diagnosis: string) => {
         if (!selectedDiagnosis && currentCase) {
             setSelectedDiagnosis(diagnosis);
             setExplanationModalContent({
-                title: "Explaination",
+                title: "Explanation",
                 content: currentCase.correctDiagnosisExplanation,
             });
-            setActiveTab('questions'); // Auto-switch to questions after diagnosis
+            if(isMobile) {
+                // On mobile, keep the modal open but switch the underlying tab
+                setActiveTab('questions');
+            } else {
+                 setActiveTab('questions'); // Auto-switch to questions after diagnosis on desktop too
+            }
         }
     };
 
@@ -1511,12 +1704,148 @@ const SimulationPage = () => {
         }
     };
 
+    const handleFinishCase = async () => {
+        if (!currentCase) return;
+        setIsFinishing(true);
+
+        try {
+            // --- SCORING RUBRIC ---
+            // 1. Diagnosis Accuracy (4.0 points)
+            const diagnosisCorrect = currentCase.potentialDiagnoses.find(d => d.diagnosis === selectedDiagnosis)?.isCorrect || false;
+            let diagnosisScore = diagnosisCorrect ? 4.0 : 0.0;
+            
+            // 2. Clinical Knowledge from MCQs (2.0 points)
+            const mcqTotal = currentCase.mcqs.length;
+            const mcqCorrectCount = Object.entries(selectedMcqAnswers).filter(([idx, answer]) =>
+                currentCase.mcqs[parseInt(idx)].correctAnswerIndex === answer
+            ).length;
+            let knowledgeScore = 0;
+            let hasMcqs = mcqTotal > 0;
+            if (hasMcqs) {
+                knowledgeScore = (mcqCorrectCount / mcqTotal) * 2.0;
+            } else {
+                // If no MCQs, redistribute these points to Diagnosis Accuracy
+                diagnosisScore += 2.0;
+            }
+
+            // 3. EPA Skills from Chat (4.0 points total)
+            const epaScores = await evaluateChatForEPAs(currentCase, messages);
+            const historyTakingAI = epaScores.find(s => s.epa === 'History-taking')?.score || 0;
+            const physicalExamAI = epaScores.find(s => s.epa === 'Physical Exam')?.score || 0;
+            
+            const historyTakingScore = (historyTakingAI / 10) * 2.5; // 2.5 points max
+            const physicalExamScore = (physicalExamAI / 10) * 1.5; // 1.5 points max
+
+            // 4. Hint Penalty
+            const hintsUsed = MAX_HINTS - getHintCount();
+            const hintPenalty = hintsUsed * 0.5;
+
+            // 5. Final Calculation
+            let finalScore = diagnosisScore + knowledgeScore + historyTakingScore + physicalExamScore - hintPenalty;
+            finalScore = Math.max(0, Math.min(10, finalScore)); // Clamp score between 0 and 10
+
+            const caseResultDetails = {
+                diagnosisCorrect,
+                mcqCorrectCount,
+                mcqTotal,
+                epaScores: { history: historyTakingAI, physicalExam: physicalExamAI },
+                hintPenalty,
+                finalScore,
+                scoreBreakdown: {
+                    diagnosis: diagnosisScore,
+                    knowledge: knowledgeScore,
+                    historyTaking: historyTakingScore,
+                    physicalExam: physicalExamScore,
+                }
+            };
+            
+            await logCompletedCase({
+                case_title: currentCase.title,
+                case_details: JSON.stringify(caseResultDetails),
+                score: finalScore,
+            });
+            
+            // Clear history for this case from local storage
+            const chatHistoryKey = `chatHistory_${currentCase.title}`;
+            localStorage.removeItem(chatHistoryKey);
+
+        } catch(error) {
+            console.error("Error during case finishing and scoring:", error);
+            // Optionally, show an error to the user
+        } finally {
+            setIsFinishing(false);
+            setPage('home');
+        }
+    };
+
+
     const handleCloseModal = () => {
         setExplanationModalContent(null);
     };
 
+    const handleModalCloseForTab = () => {
+        setActiveTab('chat');
+    };
+
+    if (!currentCase) return null;
+
+    // --- RENDER LOGIC ---
+    if (isMobile) {
+        let modalContent: ReactNode | null = null;
+        let modalTitle = "";
+        
+        switch(activeTab) {
+            case 'case':
+                modalTitle = currentCase.title;
+                modalContent = <MobileCaseInfoView currentCase={currentCase} />;
+                break;
+            case 'diagnosis':
+                modalTitle = "Select Diagnosis";
+                 modalContent = <DiagnosisPanel selectedDiagnosis={selectedDiagnosis} onSelectDiagnosis={handleSelectDiagnosis}/>;
+                break;
+            case 'questions':
+                 modalTitle = "Clinical Questions";
+                 modalContent = <QuestionsPanel
+                    selectedDiagnosis={selectedDiagnosis}
+                    selectedMcqAnswers={selectedMcqAnswers}
+                    onSelectMcqAnswer={handleSelectMcqAnswer}
+                    onFinishCase={handleFinishCase}
+                    isFinishing={isFinishing}
+                />;
+                break;
+        }
+
+        return (
+            <main className="app-container simulation-page mobile-view">
+                <PatientVisualizer />
+                <SimulationHeaderMobile activeTab={activeTab} onTabClick={setActiveTab} onBack={() => setPage('home')} />
+                
+                {activeTab === 'chat' && (
+                    <ChatWindow 
+                        chat={chat}
+                        messages={messages}
+                        setMessages={setMessages}
+                    />
+                )}
+
+                {activeTab !== 'chat' && modalContent && (
+                    <ExplanationModal title={modalTitle} onClose={handleModalCloseForTab}>
+                        {modalContent}
+                    </ExplanationModal>
+                )}
+
+                {explanationModalContent && (
+                    <ExplanationModal title={explanationModalContent.title} onClose={handleCloseModal} showOkButton>
+                        {explanationModalContent.content}
+                    </ExplanationModal>
+                )}
+            </main>
+        );
+    }
+    
+    // --- DESKTOP RENDER ---
     return (
-        <main className="app-container simulation-page">
+        <main className="app-container simulation-page desktop-view">
             <CaseInfoPanel currentCase={currentCase} />
             <div className="central-panel">
                 <PatientVisualizer />
@@ -1528,7 +1857,13 @@ const SimulationPage = () => {
                     <button className={`tab-nav-button ${activeTab === 'questions' ? 'active' : ''}`} onClick={() => setActiveTab('questions')}>Questions</button>
                 </div>
 
-                {activeTab === 'chat' && <ChatWindow />}
+                {activeTab === 'chat' && (
+                    <ChatWindow 
+                        chat={chat}
+                        messages={messages}
+                        setMessages={setMessages}
+                    />
+                )}
                 {activeTab === 'diagnosis' && (
                     <DiagnosisPanel
                         selectedDiagnosis={selectedDiagnosis}
@@ -1540,6 +1875,8 @@ const SimulationPage = () => {
                         selectedDiagnosis={selectedDiagnosis}
                         selectedMcqAnswers={selectedMcqAnswers}
                         onSelectMcqAnswer={handleSelectMcqAnswer}
+                        onFinishCase={handleFinishCase}
+                        isFinishing={isFinishing}
                     />
                 )}
             </div>
@@ -1547,6 +1884,7 @@ const SimulationPage = () => {
                 <ExplanationModal 
                     title={explanationModalContent.title}
                     onClose={handleCloseModal}
+                    showOkButton
                 >
                     {explanationModalContent.content}
                 </ExplanationModal>
@@ -1660,30 +1998,32 @@ const PatientVisualizer = () => {
                     </div>
                 </div>
             )}
-            <div className="patient-visualizer-logo-container">
-                <img src="https://raw.githubusercontent.com/akashmanjunath2505/public/main/medanna_logo.png" alt="MedAnna Logo" className="patient-visualizer-logo" />
-            </div>
         </div>
     );
 };
 
-const ChatWindow = () => {
-    const { currentCase, handleGenerateHint, hint, hintCount, isGeneratingHint, hintError, clearHint } = useAppContext();
-    const [chat, setChat] = useState<Chat | null>(null);
-    const [messages, setMessages] = useState<ChatMessage[]>([]);
+const ChatWindow = ({ chat, messages, setMessages }: {
+    chat: Chat | null;
+    messages: ChatMessage[];
+    setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
+}) => {
+    const { 
+        currentCase, handleGenerateHint, hint, hintCount, isGeneratingHint, hintError, clearHint, profile, isMobile
+    } = useAppContext();
+    
     const [userInput, setUserInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [isMuted, setIsMuted] = useState(false);
     const [speechError, setSpeechError] = useState<string | null>(null);
+    const [isChatMinimized, setIsChatMinimized] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
-    const messagesRef = useRef(messages);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const audioElRef = useRef<HTMLAudioElement>(null);
 
     // --- TTS Configuration ---
-    const ELEVENLABS_API_KEY = 'sk_3f7ba731a54aec30db588cfc54a5db41e82a013aecbf305c';
-
-    messagesRef.current = messages; // Keep ref updated with the latest messages
+    // IMPORTANT: API keys should NOT be in client-side code. This key is retrieved from
+    // the execution environment, similar to the Gemini key, and is not exposed to the user.
+    const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
 
     // Helper for ElevenLabs voice selection
     const getVoiceId = (age: number, gender: 'Male' | 'Female' | 'Other'): string => {
@@ -1726,39 +2066,17 @@ const ChatWindow = () => {
             audioEl.removeEventListener('pause', handlePause);
         };
     }, []);
-
+    
+    // Stop audio when component unmounts or case changes
     useEffect(() => {
-        if (!currentCase) return;
-        const chatHistoryKey = `chatHistory_${currentCase.title}`;
-
-        let initialMessages: ChatMessage[] = [];
-        try {
-            const savedMessages = localStorage.getItem(chatHistoryKey);
-            if (savedMessages) {
-                initialMessages = JSON.parse(savedMessages);
-            }
-        } catch (error) {
-            console.error("Failed to parse chat history from localStorage. Clearing it.", error);
-            localStorage.removeItem(chatHistoryKey);
-        }
-        setMessages(initialMessages);
-        
-        const chatInstance = createChatForCase(currentCase);
-        setChat(chatInstance);
-
-
         return () => {
-            if (messagesRef.current.length > 0) {
-                localStorage.setItem(chatHistoryKey, JSON.stringify(messagesRef.current));
-            } else {
-                localStorage.removeItem(chatHistoryKey);
-            }
             const audioEl = audioElRef.current;
             if (audioEl) {
                 audioEl.pause();
             }
-        };
+        }
     }, [currentCase]);
+
 
     const speak = useCallback(async (text: string, age: number, gender: 'Male' | 'Female' | 'Other') => {
         setSpeechError(null);
@@ -1823,7 +2141,7 @@ const ChatWindow = () => {
             setSpeechError(`TTS failed. ${error instanceof Error ? error.message : "Unknown error"}`);
             window.dispatchEvent(new CustomEvent('speech-end'));
         }
-    }, [isMuted]);
+    }, [isMuted, ELEVENLABS_API_KEY]);
 
 
     const handleSendMessage = async (e: React.FormEvent) => {
@@ -1833,6 +2151,7 @@ const ChatWindow = () => {
         setMessages(prev => [...prev, userMessage]);
         setUserInput('');
         setIsLoading(true);
+
         try {
             const response = await chat.sendMessage({ message: userInput });
             const patientMessage: ChatMessage = { sender: 'patient', text: response.text, timestamp: new Date().toISOString() };
@@ -1858,26 +2177,37 @@ const ChatWindow = () => {
         }
     }, [userInput]);
 
+    const chatWindowClass = `panel chat-window ${isMobile && isChatMinimized ? 'minimized' : ''}`;
+
     return (
-        <div className="panel chat-window">
+        <div className={chatWindowClass}>
             <audio ref={audioElRef} style={{ display: 'none' }} />
-            <div className="chat-header">
-                <div className="chat-header-info">
-                    <h3>Chat with {currentCase && currentCase.patientProfile.age < 7 ? "Patient's Mother" : 'Patient'}</h3>
-                    <p>Ask {currentCase?.patientProfile.name || 'the patient'} questions.</p>
+            {!isMobile && (
+                 <div className="chat-header">
+                    <div className="chat-header-info">
+                        <h3>Chat with {currentCase && currentCase.patientProfile.age < 7 ? "Patient's Mother" : 'Patient'}</h3>
+                        <p>Ask {currentCase?.patientProfile.name || 'the patient'} questions.</p>
+                    </div>
+                    <div className="hint-button-container">
+                        <span className="hint-count" title={`${hintCount} hints remaining`}>{hintCount}</span>
+                        <button className="button button-outline" onClick={() => handleGenerateHint(messages)}
+                            disabled={isGeneratingHint || hintCount <= 0} title="Get a hint">
+                            {isGeneratingHint ? <div className="loading-spinner"></div> : <IconLightbulb />} Get Hint
+                        </button>
+                    </div>
                 </div>
-                <div className="hint-button-container">
-                    <span className="hint-count" title={`${hintCount} hints remaining`}>{hintCount}</span>
-                    <button className="button button-outline" onClick={() => handleGenerateHint(messages)}
-                        disabled={isGeneratingHint || hintCount <= 0} title="Get a hint">
-                        {isGeneratingHint ? <div className="loading-spinner"></div> : <IconLightbulb />} Get Hint
-                    </button>
-                </div>
-            </div>
+            )}
+           
             <div className="chat-messages">
                 {messages.length === 0 ? <div className="chat-empty-state">No messages yet. Start the conversation.</div> : messages.map((msg, index) => (
                     <div key={index} className={`chat-message message-${msg.sender}`}>
-                        {msg.sender === 'patient' && <div className="avatar-icon"><IconPatient /></div>}
+                        <div className="avatar-icon">
+                           {msg.sender === 'user' ? (
+                                <div className="profile-avatar-chat">{getInitials(profile?.full_name)}</div>
+                            ) : (
+                                <IconPatient />
+                            )}
+                        </div>
                         <div className="chat-bubble">{msg.text}</div>
                     </div>
                 ))}
@@ -1907,6 +2237,11 @@ const ChatWindow = () => {
                 <button type="submit" className="icon-button button-primary" disabled={isLoading || !userInput.trim()}>
                     {isLoading ? <div className="loading-spinner"></div> : <IconSend />}
                 </button>
+                 {isMobile && (
+                    <button type="button" className="icon-button chat-toggle-button" onClick={() => setIsChatMinimized(!isChatMinimized)}>
+                        {isChatMinimized ? <IconChevronUp /> : <IconChevronDown />}
+                    </button>
+                 )}
             </form>
         </div>
     );
@@ -1933,7 +2268,7 @@ const App = () => {
     
     return (
         <div className="app-wrapper">
-           <AppHeader/>
+           {page !== 'simulation' && <AppHeader/>}
            {isGenerating && <GeneratingCaseSplash />}
            {renderPage()}
         </div>

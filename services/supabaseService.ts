@@ -6,34 +6,50 @@ import { createClient, Session, User, AuthError } from '@supabase/supabase-js';
 
 // --- DATABASE SCHEMA (DEFINED FIRST FOR TYPE RESOLUTION) ---
 
-// Define enum types outside the main Database interface to avoid overly deep type instantiation.
+// Using `any` for Json to prevent "Type instantiation is excessively deep" errors.
+// This is a common workaround for complex recursive types in Supabase schemas.
+export type Json = any;
+
+// Define the enum type separately to break the circular reference
 export type NotificationTypeEnum = "achievement" | "reminder" | "new_feature" | "system_message" | "leaderboard";
 
-export interface Database {
+export type Database = {
   public: {
     Tables: {
       case_logs: {
         Row: {
-          case_details: string
+          case_details: Json
           case_title: string
           created_at: string
           id: number
+          score: number
           user_id: string
         }
         Insert: {
-          case_details: string
+          case_details: Json
           case_title: string
           created_at?: string
-          id?: never
+          id?: number
+          score: number
           user_id: string
         }
         Update: {
-          case_details?: string
+          case_details?: Json
           case_title?: string
           created_at?: string
-          id?: never
+          id?: number
+          score?: number
           user_id?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: "case_logs_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          }
+        ]
       }
       leaderboard: {
         Row: {
@@ -46,8 +62,17 @@ export interface Database {
         }
         Update: {
           score?: number
-          user_id?: never
+          user_id?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: "leaderboard_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          }
+        ]
       }
       notifications: {
         Row: {
@@ -62,17 +87,17 @@ export interface Database {
         }
         Insert: {
           created_at?: string
-          id?: never
+          id?: number
           is_read?: boolean
           link?: string | null
           message: string
           title: string
-          type?: NotificationTypeEnum
+          type: NotificationTypeEnum
           user_id: string
         }
         Update: {
           created_at?: string
-          id?: never
+          id?: number
           is_read?: boolean
           link?: string | null
           message?: string
@@ -80,6 +105,15 @@ export interface Database {
           type?: NotificationTypeEnum
           user_id?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          }
+        ]
       }
       profiles: {
         Row: {
@@ -95,8 +129,17 @@ export interface Database {
         Update: {
           email?: string
           full_name?: string | null
-          id?: never
+          id?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: "profiles_id_fkey"
+            columns: ["id"]
+            isOneToOne: true
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          }
+        ]
       }
       progress: {
         Row: {
@@ -107,16 +150,25 @@ export interface Database {
         }
         Insert: {
           completed?: number
-          id?: never
+          id?: number
           updated_at?: string
           user_id: string
         }
         Update: {
           completed?: number
-          id?: never
+          id?: number
           updated_at?: string
           user_id?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: "progress_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          }
+        ]
       }
       streaks: {
         Row: {
@@ -135,13 +187,24 @@ export interface Database {
           current_streak?: number
           last_active_day?: string
           max_streak?: number
-          user_id?: never
+          user_id?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: "streaks_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          }
+        ]
       }
     }
     Views: {}
     Functions: {}
-    Enums: {}
+    Enums: {
+      notification_type: NotificationTypeEnum
+    }
     CompositeTypes: {}
   }
 }
@@ -167,16 +230,16 @@ export type Profile = Database['public']['Tables']['profiles']['Row'] & {
 export type Streak = Database['public']['Tables']['streaks']['Row'];
 export type CaseLog = Database['public']['Tables']['case_logs']['Row'];
 export type Notification = Database['public']['Tables']['notifications']['Row'];
-// This type is now derived from the standalone enum for a single source of truth.
-export type NotificationType = NotificationTypeEnum;
+// This type is derived from the enum inside the Database schema for a single source of truth.
+export type NotificationType = Database['public']['Enums']['notification_type'];
 
-export interface LeaderboardEntry {
-    user_id: string;
-    score: number;
-    profiles: {
-        full_name: string | null;
-    } | null;
-}
+export type LeaderboardEntry = {
+  user_id: string;
+  score: number;
+  profiles: {
+    full_name: string | null;
+  } | null;
+};
 
 
 // --- AUTHENTICATION FUNCTIONS ---
@@ -228,7 +291,7 @@ export const updateUserProfile = async (userId: string, updates: Database['publi
         .single();
 
     if (error) {
-        console.error('Error updating profile', error);
+        console.error('Error updating profile:', error.message);
         throw error;
     };
     if (!data) return null;
@@ -249,7 +312,7 @@ export const getUserScore = async (userId: string): Promise<number> => {
         .single();
 
     if (error && error.code !== 'PGRST116') {
-        console.error('Error fetching score:', error);
+        console.error('Error fetching score:', error.message);
         return 0;
     }
 
@@ -265,7 +328,7 @@ export const getNotifications = async (userId: string): Promise<Notification[]> 
         .order('created_at', { ascending: false })
         .limit(50); // Limit to last 50 notifications for performance
     if (error) {
-        console.error('Error fetching notifications:', error);
+        console.error('Error fetching notifications:', error.message);
         return [];
     }
     return data || [];
@@ -278,7 +341,7 @@ export const markNotificationAsRead = async (notificationId: number, userId: str
         .eq('id', notificationId)
         .eq('user_id', userId); // Ensure user can only update their own
     if (error) {
-        console.error('Error marking notification as read:', error);
+        console.error('Error marking notification as read:', error.message);
         return false;
     }
     return true;
@@ -291,7 +354,7 @@ export const markAllNotificationsAsRead = async (userId: string): Promise<boolea
         .eq('user_id', userId)
         .eq('is_read', false);
     if (error) {
-        console.error('Error marking all notifications as read:', error);
+        console.error('Error marking all notifications as read:', error.message);
         return false;
     }
     return true;
@@ -305,7 +368,7 @@ export const getCaseLogs = async (userId: string): Promise<CaseLog[]> => {
         .eq('user_id', userId)
         .order('created_at', { ascending: false });
     if (error) {
-        console.error('Error fetching case logs:', error);
+        console.error('Error fetching case logs:', error.message);
         return [];
     }
     return data || [];
@@ -319,7 +382,7 @@ export const getStreak = async(userId: string): Promise<Streak | null> => {
         .single();
     
     if (error && error.code !== 'PGRST116') { // PGRST116: no rows found
-        console.error('Error fetching streak:', error);
+        console.error('Error fetching streak:', error.message);
     }
     return data;
 }
@@ -358,7 +421,8 @@ export const logCaseCompletion = async (
         const caseLogInsert: Database['public']['Tables']['case_logs']['Insert'] = {
             user_id: userId,
             case_title: caseResult.case_title,
-            case_details: caseResult.case_details,
+            case_details: JSON.parse(caseResult.case_details),
+            score: caseResult.score,
         };
 
         const casesCompletedBeforeThis = progressData?.completed || 0;
@@ -430,21 +494,22 @@ export const logCaseCompletion = async (
         // --- 3. EXECUTE all writes ---
         const writes = await Promise.all([
             supabase.from('case_logs').insert(caseLogInsert),
-            supabase.from('progress').upsert(progressUpsert),
-            supabase.from('streaks').upsert(streakUpsert),
-            supabase.from('leaderboard').upsert(leaderboardUpsert),
+            supabase.from('progress').upsert(progressUpsert, { onConflict: 'user_id' }),
+            supabase.from('streaks').upsert(streakUpsert, { onConflict: 'user_id' }),
+            supabase.from('leaderboard').upsert(leaderboardUpsert, { onConflict: 'user_id' }),
             supabase.from('notifications').insert(notificationInsert),
         ]);
 
         // Check for errors in any of the write operations
         for (const result of writes) {
             if (result.error) {
+                // Don't throw for upsert "ignore" scenarios if that's ever used. For now, any error is critical.
                 throw new Error(`A database operation failed: ${result.error.message}`);
             }
         }
 
     } catch (error) {
-        console.error("Critical error in logCaseCompletion:", error);
+        console.error("Critical error in logCaseCompletion:", error instanceof Error ? error.message : error);
         // Re-throw the error so the calling context knows something went wrong
         throw error;
     }
@@ -474,7 +539,7 @@ export const getLeaderboard = async (): Promise<LeaderboardEntry[]> => {
         .limit(20);
 
     if (leaderboardError) {
-        console.error('Error fetching leaderboard:', leaderboardError);
+        console.error('Error fetching leaderboard:', leaderboardError.message);
         return botUsers; // Return bots if fetching fails
     }
 
@@ -496,7 +561,7 @@ export const getLeaderboard = async (): Promise<LeaderboardEntry[]> => {
     let realUsersWithProfiles: LeaderboardEntry[];
 
     if (profilesError) {
-        console.error('Error fetching profiles for leaderboard:', profilesError);
+        console.error('Error fetching profiles for leaderboard:', profilesError.message);
         // Continue with user_ids but no names
         realUsersWithProfiles = realUsers.map(u => ({
             ...u,
