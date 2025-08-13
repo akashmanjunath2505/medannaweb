@@ -5,7 +5,7 @@
 import React, { useState, useEffect, useCallback, useRef, StrictMode, ReactNode, createContext, useContext, useMemo } from 'react';
 import { createRoot } from 'react-dom/client';
 import { generateCase, createChatForCase, DiagnosticCase, MCQ, generateSoapNoteForCase, generateHint, CaseTags, GenerationFilters, pickSpecialtyForCase, pickBestVideo, Chat, evaluateChatForEPAs, EPAScore } from './services/geminiService';
-import { supabase, signIn, signUp, signOut, getUserProfile, updateUserProfile, getCaseLogs, logCaseCompletion as supabaseLogCaseCompletion, getLeaderboard, getStreak, Profile, Streak, CaseLog, LeaderboardEntry, getUserScore, getNotifications, markNotificationAsRead as supabaseMarkNotificationAsRead, markAllNotificationsAsRead as supabaseMarkAllNotificationsAsRead, Notification, NotificationType } from './services/supabaseService';
+import { supabase, signIn, signUp, signOut, getUserProfile, updateUserProfile, getCaseLogs, logCaseCompletion as supabaseLogCaseCompletion, getLeaderboard, getStreak, Profile, Streak, CaseLog, LeaderboardEntry, getUserScore, getNotifications, markNotificationAsRead as supabaseMarkNotificationAsRead, markAllNotificationsAsRead as supabaseMarkAllNotificationsAsRead, Notification, NotificationType, CaseResultDetails } from './services/supabaseService';
 import { Session, User } from '@supabase/supabase-js';
 
 
@@ -17,7 +17,7 @@ type EPA = 'History-taking' | 'Physical Exam' | 'Diagnosis' | 'Management';
 type Page = 'home' | 'simulation';
 type Theme = 'light' | 'dark';
 type ActiveTab = 'chat' | 'diagnosis' | 'questions' | 'case';
-type HomeTab = 'new-case' | 'activity' | 'leaderboard';
+type HomeTab = 'home' | 'case' | 'progress' | 'leaderboard';
 
 
 export interface ChatMessage {
@@ -28,7 +28,7 @@ export interface ChatMessage {
 
 interface CaseResultPayload {
     case_title: string;
-    case_details: string;
+    case_details: CaseResultDetails;
     score: number;
 }
 
@@ -113,15 +113,15 @@ const IconCheck = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" heigh
 const IconX = ({className}: {className?: string}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>;
 const IconChevronDown = ({ className }: { className?: string }) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>;
 const IconChevronUp = ({ className }: { className?: string }) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>;
-const IconHome = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>;
+const IconHome = ({className, isActive}: {className?: string, isActive?: boolean}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill={isActive ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>;
 const IconRefresh = () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></svg>;
 const IconSun = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>;
 const IconMoon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>;
 const IconSend = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>;
 const IconPatient = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10Z"/><path d="M19 22v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/></svg>;
 const IconLightbulb = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg>;
-const IconUser = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>;
-const IconDashboard = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>;
+const IconUser = ({className, isActive}: {className?: string, isActive?: boolean}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>;
+const IconDashboard = ({className, isActive}: {className?: string, isActive?: boolean}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill={isActive ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>;
 const IconLogOut = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>;
 const IconFlame = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5-2 4.5-2 4.5s-1.5-2-2.5-2c-1.5 0-2.5 2-2.5 2.5 0 2.5 2.5 2.5 2.5 2.5z"/><path d="M14.5 14.5c0-2.5-2.5-2.5-2.5-2.5s-2 0-2.5 2.5c.5.5 1.5 1.5 2.5 1.5s2-1 2.5-1.5z"/><path d="M12 18.5c-2.835 0-5.335-1.833-6-4.5 1.5 1 3 1.5 4.5 1.5s3-.5 4.5-1.5c-.667 2.667-3.165 4.5-6 4.5z"/></svg>;
 const IconCheckCircle = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>;
@@ -131,8 +131,24 @@ const IconBell = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height
 const IconAward = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 17 17 23 15.79 13.88"/></svg>;
 const IconMail = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>;
 const IconChevronLeft = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>;
-const IconSettings = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 0 2l-.15.08a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1 0 2l.15.08a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>;
+const IconSettings = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 0 2l-.15.08a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l-.22-.38a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1 0 2l.15.08a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>;
 const IconMapPin = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>;
+const IconGift = () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>;
+const IconPlay = () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>;
+const IconArrowRight = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>;
+const IconTarget = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>;
+const IconCalendar = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>;
+const IconCrown = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4l3 12h14l3-12-6 7-4-7-4 7-6-7z"/></svg>;
+const IconTrendingUp = ({className, isActive}: {className?: string, isActive?: boolean}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill={isActive ? "currentColor" : "none"} stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>;
+const IconBarChart = ({className, isActive}: {className?: string, isActive?: boolean}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill={isActive ? "currentColor" : "none"} stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>;
+const IconHeart = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>;
+const IconBrain = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v1.23a.5.5 0 0 0 .3.46l4.43 2.22a2.5 2.5 0 0 1 1.47 3.32l-1.04 2.56a2.5 2.5 0 0 1-3.32 1.47l-4.43-2.22a.5.5 0 0 0-.3-.46V9.5A2.5 2.5 0 0 1 7 7 2.5 2.5 0 0 1 9.5 4.5 2.5 2.5 0 0 1 12 7v3.5"/><path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v1.23a.5.5 0 0 1-.3.46l-4.43 2.22a2.5 2.5 0 0 0-1.47 3.32l1.04 2.56a2.5 2.5 0 0 0 3.32 1.47l4.43-2.22a.5.5 0 0 1 .3-.46V9.5A2.5 2.5 0 0 0 17 7a2.5 2.5 0 0 0-2.5-2.5Z"/><path d="M6 16a1 1 0 0 1-1-1v-2.5a.5.5 0 0 1 .5-.5.5.5 0 0 0 .5-.5V10a1 1 0 0 1 1-1h1"/><path d="M18 16a1 1 0 0 0 1-1v-2.5a.5.5 0 0 0-.5-.5.5.5 0 0 1-.5-.5V10a1 1 0 0 0-1-1h-1"/></svg>;
+const IconScalpel = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.19 21.19 2.81 2.81"/><path d="M18.37 3.63 8 14l-4.37.75c-2.3.4-3.56 3.1-2.12 4.54l.15.15c1.44 1.44 4.14.18 4.54-2.12L7 16l10.37-10.37Z"/></svg>;
+const IconActivity = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>;
+const IconBaby = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12.5a5 5 0 0 0 5 5"/><path d="M9 8.5a5 5 0 0 1 5 5"/><path d="M11.5 2a.5.5 0 0 0-1 0V3a.5.5 0 0 0 1 0Z"/><path d="M18 12.5a5 5 0 0 0 5-5A5 5 0 0 0 14 6c-1.5 0-2.8 1-3.5 2.5"/><path d="M6 12.5a5 5 0 0 1-5-5A5 5 0 0 1 10 6c1.5 0 2.8 1 3.5 2.5"/><path d="M3 20.5a.5.5 0 0 0 1 0V19a.5.5 0 0 0-1 0Z"/><path d="M21 20.5a.5.5 0 0 1-1 0V19a.5.5 0 0 1 1 0Z"/><path d="M12 22a.5.5 0 0 0 0-1h-2a.5.5 0 0 0 0 1Z"/><circle cx="12" cy="12" r="10"/></svg>;
+const IconBottle = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 5h4"/><path d="M8 2h8"/><path d="M7 5v11a5 5 0 0 0 10 0V5"/><path d="M12 12H7"/><path d="M12 17h5"/></svg>;
+const IconFilter = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46V19l4 2v-8.54L22 3z"/></svg>;
+const IconUserPlus = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="17" y1="11" x2="23" y2="11"/></svg>;
 
 // --- REACT CONTEXT ---
 interface AppContextType {
@@ -158,6 +174,8 @@ interface AppContextType {
     theme: Theme;
     toggleTheme: () => void;
     isMobile: boolean;
+    isMobileMenuOpen: boolean;
+    setIsMobileMenuOpen: (isOpen: boolean) => void;
     
     // Case Generation
     isGenerating: boolean;
@@ -204,22 +222,33 @@ const timeAgo = (isoDate: string): string => {
     const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
 
     let interval = seconds / 31536000;
-    if (interval > 1) return `${Math.floor(interval)}y ago`;
+    if (interval > 1) return `${Math.floor(interval)} years ago`;
     interval = seconds / 2592000;
-    if (interval > 1) return `${Math.floor(interval)}mo ago`;
+    if (interval > 1) return `${Math.floor(interval)} months ago`;
     interval = seconds / 86400;
-    if (interval > 1) return `${Math.floor(interval)}d ago`;
+    if (interval > 1) return `${Math.floor(interval)} days ago`;
     interval = seconds / 3600;
-    if (interval > 1) return `${Math.floor(interval)}h ago`;
+    if (interval > 1) return `${Math.floor(interval)} hours ago`;
     interval = seconds / 60;
-    if (interval > 1) return `${Math.floor(interval)}m ago`;
-    return `${Math.floor(seconds)}s ago`;
+    if (interval > 1) return `${Math.floor(interval)} minutes ago`;
+    return `${Math.floor(seconds)} seconds ago`;
 };
 
 const getInitials = (name: string | null | undefined) => {
     if (!name) return 'U';
     return name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase();
 }
+
+const inferSpecialtyFromTitle = (title: string): Specialty => {
+    const lowerTitle = title.toLowerCase();
+    if (lowerTitle.includes('chest pain') || lowerTitle.includes('dyspnea') || lowerTitle.includes('palpitations')) return 'Cardiology';
+    if (lowerTitle.includes('weakness') || lowerTitle.includes('headache') || lowerTitle.includes('seizure')) return 'Neurology';
+    if (lowerTitle.includes('abdominal pain') || lowerTitle.includes('female')) return 'Obstetrics & Gynecology';
+    if (lowerTitle.includes('skin') || lowerTitle.includes('rash')) return 'Dermatology';
+    if (lowerTitle.includes('child') || lowerTitle.includes('infant') || lowerTitle.includes('boy') || lowerTitle.includes('girl')) return 'Pediatrics';
+    if (lowerTitle.includes('elderly') || lowerTitle.includes('polyuria') || lowerTitle.includes('fatigue')) return 'Internal Medicine';
+    return 'Internal Medicine'; // Default fallback
+};
 
 
 const AppContextProvider = ({ children }: { children: ReactNode }) => {
@@ -235,9 +264,10 @@ const AppContextProvider = ({ children }: { children: ReactNode }) => {
 
     // App State
     const [page, setPage] = useState<Page>('home');
-    const [homeTab, setHomeTab] = useState<HomeTab>('new-case');
+    const [homeTab, setHomeTab] = useState<HomeTab>('home');
     const [theme, setTheme] = useState<Theme>('light');
     const [isMobile, setIsMobile] = useState(window.innerWidth <= 800);
+    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     
     // Case Generation State
     const [isGenerating, setIsGenerating] = useState(false);
@@ -300,7 +330,7 @@ const AppContextProvider = ({ children }: { children: ReactNode }) => {
             }
             
             setStreak(streakData);
-            setCaseLogs(logsData);
+            setCaseLogs(logsData.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()));
             setLeaderboard(leaderboardData);
             setScore(scoreData);
             setNotifications(notificationsData);
@@ -312,9 +342,13 @@ const AppContextProvider = ({ children }: { children: ReactNode }) => {
     };
 
     useEffect(() => {
-        // Mobile detection
-        const handleResize = () => setIsMobile(window.innerWidth <= 800);
+        // Mobile detection & vh fix
+        const handleResize = () => {
+            setIsMobile(window.innerWidth <= 800);
+            document.documentElement.style.setProperty('--app-height', `${window.innerHeight}px`);
+        };
         window.addEventListener('resize', handleResize);
+        handleResize(); // Initial call to set values
 
         // Handle Auth
         const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
@@ -374,7 +408,8 @@ const AppContextProvider = ({ children }: { children: ReactNode }) => {
     };
 
     const updateUserTrainingPhase = async (trainingPhase: TrainingPhase) => {
-        if (!profile || !session?.user) return;
+        if (!profile || !session?.user || isUpdating) return;
+        setIsUpdating(true);
         try {
             const { error } = await supabase.auth.updateUser({
                 data: { training_phase: trainingPhase }
@@ -384,6 +419,8 @@ const AppContextProvider = ({ children }: { children: ReactNode }) => {
         } catch(error: any) {
             console.error("Failed to update training phase", error.message);
             // Optionally set an error state to show in UI
+        } finally {
+            setIsUpdating(false);
         }
     };
 
@@ -457,6 +494,7 @@ const AppContextProvider = ({ children }: { children: ReactNode }) => {
         setPage('simulation');
     }, [getHintCount]);
 
+    const [isUpdating, setIsUpdating] = useState(false);
     const handleGenerateAndStart = async (filters: GenerationFilters) => {
         setGenerationFilters(filters);
         setIsGenerating(true);
@@ -516,7 +554,7 @@ const AppContextProvider = ({ children }: { children: ReactNode }) => {
 
     const value = {
         session, profile, isAuthLoading, authError, streak, score, caseLogs, leaderboard, setProfile, handleSignOut, updateUserTrainingPhase, logCompletedCase,
-        page, setPage, homeTab, setHomeTab, theme, toggleTheme, isMobile,
+        page, setPage, homeTab, setHomeTab, theme, toggleTheme, isMobile, isMobileMenuOpen, setIsMobileMenuOpen,
         isGenerating, generationError, generationFilters, currentCase, handleStartNewCase, handleGenerateAndStart, handleRegenerateCase,
         soapNote, isGeneratingSoapNote, soapNoteError, handleGenerateSoapNote,
         hintCount, getHintCount, updateHintCount,
@@ -651,21 +689,90 @@ const ProfileMenu = () => {
     )
 }
 
+const MobileProfileMenu = ({ onClose }: { onClose: () => void }) => {
+    const { profile, theme, toggleTheme, handleSignOut, setHomeTab } = useAppContext();
+
+    if (!profile) return null;
+
+    const handleNavigation = (tab: HomeTab) => {
+        setHomeTab(tab);
+        onClose();
+    };
+
+    return (
+        <div className="mobile-menu-overlay" onClick={onClose}>
+            <div className="mobile-menu-content" onClick={(e) => e.stopPropagation()}>
+                <div className="mobile-menu-header">
+                    <h3>{profile.full_name || 'User'}</h3>
+                    <p>{profile.email}</p>
+                    <button className="close-button" onClick={onClose} aria-label="Close menu"><IconClose /></button>
+                </div>
+                <div className="mobile-menu-body">
+                    <div className="mobile-menu-section">
+                         <button className="mobile-menu-item" onClick={() => handleNavigation('progress')}>
+                            <IconTrendingUp />
+                            <span>My Progress</span>
+                        </button>
+                        <button className="mobile-menu-item" onClick={() => handleNavigation('leaderboard')}>
+                            <IconBarChart />
+                            <span>Leaderboard</span>
+                        </button>
+                    </div>
+                     <div className="mobile-menu-section">
+                        <button className="mobile-menu-item" onClick={() => { toggleTheme(); onClose(); }}>
+                            {theme === 'light' ? <IconMoon /> : <IconSun />}
+                            <span>Switch to {theme === 'light' ? 'Dark' : 'Light'} Theme</span>
+                        </button>
+                        <button className="mobile-menu-item" onClick={() => { handleSignOut(); onClose(); }}>
+                            <IconLogOut />
+                            <span>Sign Out</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 const AppHeader = () => {
-    const { session, setPage, isMobile } = useAppContext();
-    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-    const menuRef = useRef<HTMLDivElement>(null);
+    const { session, setPage, isMobile, page, homeTab, setIsMobileMenuOpen, profile } = useAppContext();
+    
+    if (isMobile && page === 'home' && homeTab === 'leaderboard') {
+        return null; // LeaderboardPage has its own header
+    }
 
-    useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-                setIsMobileMenuOpen(false);
-            }
-        };
-        document.addEventListener("mousedown", handleClickOutside);
-        return () => document.removeEventListener("mousedown", handleClickOutside);
-    }, []);
-
+    if (isMobile && page === 'home') {
+        if (homeTab === 'home') {
+            return (
+                <header className="app-header mobile-home-header">
+                    <button className="icon-button" onClick={() => setIsMobileMenuOpen(true)} aria-label="Open menu">
+                        <IconMenu />
+                    </button>
+                    <div className="welcome-message">
+                        <h2>Hi, Dr. {profile?.full_name?.split(' ')[0] || 'User'}</h2>
+                        <p>Your patients are lined up, let's get started</p>
+                    </div>
+                    <NotificationMenu />
+                </header>
+            );
+        }
+        
+        // This header is for the "Case", "Progress", and "Leaderboard" tabs on mobile.
+        let title = "Simulation"; // Default for 'case' tab
+        if (homeTab === 'progress') title = "Progress";
+        
+        return (
+            <header className="app-header mobile-generic-header">
+                <button className="icon-button" onClick={() => setIsMobileMenuOpen(true)} aria-label="Open menu">
+                    <IconMenu />
+                </button>
+                <h1 className="app-header-title">{title}</h1>
+                <NotificationMenu />
+            </header>
+        );
+    }
+    
+    // Default Desktop / Simulation Page Header
     return (
         <header className="app-header">
             <div className="app-header-left">
@@ -680,12 +787,10 @@ const AppHeader = () => {
                 {session && <NotificationMenu />}
                 {session && !isMobile && <ProfileMenu />}
                 {session && isMobile && (
-                    <div className="mobile-header-menu" ref={menuRef}>
-                        <button className="icon-button" onClick={() => setIsMobileMenuOpen(prev => !prev)} aria-label="Open menu" aria-haspopup="true" aria-expanded={isMobileMenuOpen}>
-                            <IconMenu />
-                        </button>
-                        {isMobileMenuOpen && <ProfileMenu />}
-                    </div>
+                    // This hamburger menu is for the simulation page header
+                    <button className="icon-button" onClick={() => setIsMobileMenuOpen(true)} aria-label="Open menu">
+                        <IconMenu />
+                    </button>
                 )}
                  {!session && <div/>}
             </div>
@@ -891,7 +996,7 @@ const CustomCaseSummary = ({ filters, onRemoveFilter }: { filters: Partial<Gener
 
 const trainingPhaseInfo: Record<TrainingPhase, { icon: React.FC; description: string }> = {
     'Pre-clinical': { icon: IconBook, description: "Build foundational knowledge in basic medical sciences." },
-    'Para-clinical': { icon: IconMicroscope, description: "Bridge theory with pathology, pharmacology, and microbiology." },
+    'Para-clinical': { icon: IconSettings, description: "Bridge theory with pathology, pharmacology, and microbiology." },
     'Clinical': { icon: IconStethoscope, description: "Gain hands-on experience in wards and patient care." },
     'Internship': { icon: IconBriefcase, description: "Apply your skills in a supervised professional setting." },
     'NExT/FMGE Prep': { icon: IconGraduationCap, description: "Focus on high-yield topics for your licensing exams." },
@@ -902,13 +1007,14 @@ const TrainingPhaseSelector = () => {
     const [isUpdating, setIsUpdating] = useState<TrainingPhase | null>(null);
 
     const handleSelectPhase = async (phase: TrainingPhase) => {
+        if (isUpdating !== null) return; // Prevent multiple clicks while an update is in progress
         setIsUpdating(phase);
         await updateUserTrainingPhase(phase);
         setIsUpdating(null);
     };
 
     return (
-        <div className="training-phase-grid">
+        <div className="training-phase-list">
             {ALL_TRAINING_PHASES.map(phase => {
                 const info = trainingPhaseInfo[phase];
                 const Icon = info.icon;
@@ -930,7 +1036,6 @@ const TrainingPhaseSelector = () => {
                             <h4>{phase}</h4>
                             <p>{info.description}</p>
                         </div>
-                        {isSelected && <div className="selected-indicator"><IconCheck /></div>}
                     </button>
                 );
             })}
@@ -947,7 +1052,7 @@ const NewCaseTab = () => {
         epas: [],
         challengeMode: false,
     });
-    const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
+    const [simSetupTab, setSimSetupTab] = useState<'Phase' | 'Specialty' | 'EPA'>('Phase');
 
     useEffect(() => {
         if (profile?.training_phase) {
@@ -955,10 +1060,12 @@ const NewCaseTab = () => {
         }
     }, [profile]);
 
-    const handleRemoveFilter = (filterKey: 'specialties' | 'epas', value: string) => {
+    const handleMultiSelectChange = (filterKey: 'specialties' | 'epas', value: string) => {
         setFilters(prev => {
             const currentValues = (prev[filterKey] as string[]) || [];
-            const newValues = currentValues.filter(v => v !== value);
+            const newValues = currentValues.includes(value)
+                ? currentValues.filter(v => v !== value)
+                : [...currentValues, value];
             return { ...prev, [filterKey]: newValues };
         });
     };
@@ -973,9 +1080,62 @@ const NewCaseTab = () => {
         });
     };
 
+    if (isMobile) {
+        return (
+            <div className="new-case-tab-mobile">
+                <div className="mobile-sim-tabs">
+                    <button className={simSetupTab === 'Phase' ? 'active' : ''} onClick={() => setSimSetupTab('Phase')}>Phase</button>
+                    <button className={simSetupTab === 'Specialty' ? 'active' : ''} onClick={() => setSimSetupTab('Specialty')}>Specialty</button>
+                    <button className={simSetupTab === 'EPA' ? 'active' : ''} onClick={() => setSimSetupTab('EPA')}>EPA</button>
+                </div>
+
+                <div className="mobile-tab-content">
+                    {simSetupTab === 'Phase' && (
+                         <div className="training-phase-section mobile">
+                            <h2>Select Your Training Phase</h2>
+                            <p>This tailors case difficulty and is saved to your profile for future sessions.</p>
+                            <TrainingPhaseSelector />
+                        </div>
+                    )}
+                    {simSetupTab === 'Specialty' && (
+                        <div className="specialty-section mobile">
+                            <h2>Select Specialty</h2>
+                            <p>Choose one or more specialties for your case.</p>
+                            <div className="checkbox-group">
+                                {ALL_SPECIALTIES.map(s => <label key={s}><input type="checkbox" checked={filters.specialties?.includes(s)} onChange={() => handleMultiSelectChange('specialties', s)} />{s}</label>)}
+                             </div>
+                        </div>
+                    )}
+                    {simSetupTab === 'EPA' && (
+                         <div className="specialty-section mobile">
+                            <h2>Select EPA Focus</h2>
+                            <p>Choose one or more EPAs to focus on.</p>
+                             <div className="checkbox-group">
+                                {ALL_EPAS.map(e => <label key={e}><input type="checkbox" checked={filters.epas?.includes(e)} onChange={() => handleMultiSelectChange('epas', e)} />{e.replace('-', ' ')}</label>)}
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                <div className="mobile-start-button-container">
+                    <button
+                        className="button button-primary generate-button"
+                        onClick={handleGenerateClick}
+                        disabled={isGenerating || !profile?.training_phase}
+                        title={!profile?.training_phase ? "Please select a training phase first" : "Start a new case"}
+                    >
+                        {isGenerating ? <div className="loading-spinner"></div> : "Start Simulation"}
+                    </button>
+                     {!profile?.training_phase && <p className="alert alert-inline">Please select a training phase to start.</p>}
+                    {generationError && <p className="alert alert-error">{generationError}</p>}
+                </div>
+            </div>
+        )
+    }
+
     return (
         <div className="generation-section">
-            {!isMobile && <FilterSidebar filters={filters} onFilterChange={setFilters} />}
+            <FilterSidebar filters={filters} onFilterChange={setFilters} />
 
             <div className="generation-main-content">
                 <div className="training-phase-section">
@@ -987,13 +1147,7 @@ const NewCaseTab = () => {
                 <div className="custom-case-generation">
                     <h2>2. Configure & Start Simulation</h2>
                     
-                    <CustomCaseSummary filters={filters} onRemoveFilter={handleRemoveFilter} />
-                    
-                    {isMobile && (
-                         <button className="button button-outline filter-button-mobile" onClick={() => setIsFilterModalOpen(true)}>
-                            <IconSettings/> Customize Case
-                         </button>
-                    )}
+                    <CustomCaseSummary filters={filters} onRemoveFilter={(key, val) => handleMultiSelectChange(key, val)} />
 
                     <button
                         className="button button-primary generate-button"
@@ -1007,126 +1161,12 @@ const NewCaseTab = () => {
                     {generationError && <p className="alert alert-error">{generationError}</p>}
                 </div>
             </div>
-
-            {isMobile && isFilterModalOpen && (
-                <ExplanationModal 
-                    title="Customize Your Case" 
-                    onClose={() => setIsFilterModalOpen(false)}
-                    showOkButton={true}
-                >
-                    <FilterSidebar 
-                        filters={filters} 
-                        onFilterChange={setFilters} 
-                        hideTitle={true} 
-                        className="in-modal" 
-                    />
-                </ExplanationModal>
-            )}
         </div>
     );
 };
-
-const ActivityLogTab = () => {
-    const { caseLogs } = useAppContext();
-
-    if (caseLogs.length === 0) {
-        return <div className="empty-state">You haven't completed any cases yet. Go to the "New Case" tab to start one!</div>;
-    }
-
-    const getScoreClass = (score: number) => {
-        if (score < 4.0) return 'low';
-        if (score < 7.5) return 'medium';
-        return 'high';
-    };
-
-    return (
-        <div className="activity-log-container">
-            <table className="activity-log-table">
-                <thead>
-                    <tr>
-                        <th>Case Title</th>
-                        <th>Diagnosis Correct</th>
-                        <th>Performance Score</th>
-                        <th>Completed On</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {caseLogs.slice().reverse().map(log => {
-                        let details;
-                        try {
-                            // Check if case_details is a string, and parse if so.
-                            if (typeof log.case_details === 'string') {
-                                details = JSON.parse(log.case_details);
-                            } else {
-                                details = log.case_details; // Assume it's already an object
-                            }
-                        } catch (e) {
-                            console.error("Failed to parse case_details", log.case_details);
-                            details = { diagnosisCorrect: false }; // Fallback
-                        }
-                        
-                        const scoreClass = getScoreClass(log.score);
-                        
-                        return (
-                            <tr key={log.id}>
-                                <td data-label="Case Title">{log.case_title}</td>
-                                <td data-label="Diagnosis Correct">
-                                    <span className={`status-pill ${details.diagnosisCorrect ? 'status-correct' : 'status-incorrect'}`}>
-                                        {details.diagnosisCorrect ? 'Correct' : 'Incorrect'}
-                                    </span>
-                                </td>
-                                <td data-label="Performance Score">
-                                    <span className={`score-value ${scoreClass}`}>{log.score.toFixed(1)}</span>
-                                    <span className="score-range">(0.0 - 10.0)</span>
-                                </td>
-                                <td data-label="Completed On">{new Date(log.created_at).toLocaleDateString()}</td>
-                            </tr>
-                        )
-                    })}
-                </tbody>
-            </table>
-        </div>
-    );
-};
-
-
-const LeaderboardTab = () => {
-    const { leaderboard, profile } = useAppContext();
-
-    if (leaderboard.length === 0) {
-        return <div className="empty-state">No scores on the leaderboard yet. Complete a case to get started!</div>;
-    }
-    
-    return (
-        <div className="leaderboard-container">
-            <table className="leaderboard-table">
-                <thead>
-                    <tr>
-                        <th>Rank</th>
-                        <th>User</th>
-                        <th>Score</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {leaderboard.map((entry, index) => {
-                        const isCurrentUser = profile?.id === entry.user_id;
-                        return (
-                            <tr key={entry.user_id} className={isCurrentUser ? 'current-user' : ''}>
-                                <td data-label="Rank" className="rank">#{index + 1}</td>
-                                <td data-label="User">{entry.profiles?.full_name || 'Anonymous'}{isCurrentUser ? ' (You)' : ''}</td>
-                                <td data-label="Score" className="score">{entry.score.toFixed(1)}</td>
-                            </tr>
-                        )
-                    })}
-                </tbody>
-            </table>
-        </div>
-    );
-};
-
 
 const DashboardMetrics = () => {
-    const { streak, caseLogs, score, isMobile } = useAppContext();
+    const { streak, caseLogs, score } = useAppContext();
     return (
         <div className="dashboard-metrics">
             <div className="metric-card">
@@ -1188,69 +1228,565 @@ const HomePageSidebar = () => {
 }
 
 const BottomNavBar = () => {
-    const { homeTab, setHomeTab } = useAppContext();
+    const { homeTab, setHomeTab, setIsMobileMenuOpen } = useAppContext();
+
+    const TABS = [
+        { id: 'home', icon: IconHome, label: 'Home' },
+        { id: 'case', icon: IconDashboard, label: 'Case' },
+        { id: 'progress', icon: IconTrendingUp, label: 'Progress' },
+        { id: 'leaderboard', icon: IconBarChart, label: 'Leaderboard' },
+        { id: 'profile', icon: IconUser, label: 'Profile' },
+    ];
+    
+    const handleNavClick = (tabId: string) => {
+        if (tabId === 'profile') {
+            setIsMobileMenuOpen(true);
+        } else {
+            setHomeTab(tabId as HomeTab);
+        }
+    }
+
     return (
         <div className="bottom-nav-bar">
             <nav>
-                <button className={`nav-item ${homeTab === 'new-case' ? 'active' : ''}`} onClick={() => setHomeTab('new-case')}>
-                    <IconStethoscope/>
-                    <span>New Case</span>
-                </button>
-                <button id="activity" className={`nav-item ${homeTab === 'activity' ? 'active' : ''}`} onClick={() => setHomeTab('activity')}>
-                    <IconFileText/>
-                    <span>Activity</span>
-                </button>
-                 <button id="leaderboard" className={`nav-item ${homeTab === 'leaderboard' ? 'active' : ''}`} onClick={() => setHomeTab('leaderboard')}>
-                    <IconTrophy/>
-                    <span>Ranks</span>
-                </button>
+                {TABS.map(tab => {
+                    const Icon = tab.icon;
+                    const isActive = homeTab === tab.id;
+                    return (
+                        <button
+                            key={tab.id}
+                            className={`nav-item ${isActive ? 'active' : ''}`}
+                            onClick={() => handleNavClick(tab.id)}
+                            aria-label={tab.label}
+                        >
+                            <Icon className="nav-icon" isActive={isActive}/>
+                            <span className="nav-label">{tab.label}</span>
+                        </button>
+                    )
+                })}
             </nav>
         </div>
     )
 }
 
-const FAB = () => {
-    const { setHomeTab } = useAppContext();
-    // This FAB is a shortcut to the primary action on the "New Case" tab
-    const handleFabClick = () => {
-       setHomeTab('new-case');
-       const generateButton = document.querySelector('.generate-button');
-       if (generateButton) {
-           generateButton.scrollIntoView({ behavior: 'smooth', block: 'center' });
-       }
-    }
+const PromoBanner = () => (
+    <div className="promo-banner">
+        <IconGift />
+        <div className="promo-banner-text">
+            <strong>Get Free access for 1 month</strong>
+            <span>Valid till 31st August.</span>
+        </div>
+    </div>
+);
+
+const ResumeCaseCard = ({ lastCase, isRecentActivity = false }: { lastCase: CaseLog; isRecentActivity?: boolean }) => {
+    const { handleGenerateAndStart, profile, isGenerating } = useAppContext();
+    const [isLoading, setIsLoading] = useState(false);
+
+    const handlePracticeAgain = () => {
+        if (profile?.training_phase && !isGenerating && !isLoading) {
+            setIsLoading(true);
+            const specialty = inferSpecialtyFromTitle(lastCase.case_title);
+            handleGenerateAndStart({
+                trainingPhase: profile.training_phase,
+                specialties: [specialty],
+            }).finally(() => setIsLoading(false));
+        }
+    };
+    
+    const cardClass = isRecentActivity ? "resume-case-card recent-activity" : "resume-case-card";
+
     return (
-        <button className="fab" onClick={handleFabClick} aria-label="Start New Case">
-            <IconStethoscope/>
-        </button>
+        <div className={cardClass}>
+            <div className="resume-case-info">
+                <p className="resume-case-specialty">{inferSpecialtyFromTitle(lastCase.case_title).toUpperCase()}</p>
+                <h3>{lastCase.case_title}</h3>
+            </div>
+             <div className="resume-case-right">
+                <p className="resume-case-time">{timeAgo(lastCase.created_at)}</p>
+                <button className="resume-case-button" onClick={handlePracticeAgain} disabled={isGenerating || isLoading}>
+                    {(isGenerating || isLoading) ? <div className="loading-spinner"></div> : <IconRefresh />}
+                    <span>Practice Again</span>
+                </button>
+            </div>
+        </div>
     )
 }
 
+const StartSimCard = ({ onStart }: { onStart: () => void }) => (
+    <div className="start-sim-card">
+        <h2>Talk to your Virtual Patient</h2>
+        <p>Simulate Real Interviews. Diagnose in Real Time.</p>
+        <button onClick={onStart}>
+            <span>Start Now</span>
+            <IconArrowRight />
+        </button>
+    </div>
+);
+
+const QuickActions = () => {
+    const { caseLogs, streak } = useAppContext();
+
+    const accuracy = useMemo(() => {
+        if (!caseLogs || caseLogs.length === 0) return 0;
+        const correctCount = caseLogs.filter(log => log.case_details.diagnosisCorrect).length;
+        return Math.round((correctCount / caseLogs.length) * 100);
+    }, [caseLogs]);
+
+    const casesToday = useMemo(() => {
+        const todayStr = new Date().toISOString().split('T')[0];
+        return caseLogs.filter(log => log.created_at.startsWith(todayStr)).length;
+    }, [caseLogs]);
+
+    return (
+        <section className="quick-actions-section">
+            <h3>Quick actions</h3>
+            <div className="quick-actions-grid">
+                <div className="metric-card-v2">
+                    <div className="metric-card-v2-icon"><IconTarget /></div>
+                    <p>Accuracy</p>
+                    <span>{accuracy.toFixed(1)} %</span>
+                </div>
+                <div className="metric-card-v2">
+                    <div className="metric-card-v2-icon"><IconCalendar /></div>
+                    <p>Today</p>
+                    <span>{casesToday} Case{casesToday !== 1 && 's'}</span>
+                </div>
+                <div className="metric-card-v2">
+                    <div className="metric-card-v2-icon"><IconFlame /></div>
+                    <p>Streak</p>
+                    <span>{streak?.current_streak ?? 0} day{streak?.current_streak !== 1 && 's'}</span>
+                </div>
+            </div>
+        </section>
+    );
+};
+
+const TopPerformances = () => {
+    const { leaderboard, profile } = useAppContext();
+    const topThree = leaderboard.slice(0, 3);
+    const currentUserRank = leaderboard.findIndex(e => e.user_id === profile?.id);
+
+    return (
+        <section className="top-performances-section">
+            <div className="top-performances-header">
+                <IconCrown />
+                <h3>Top Performances</h3>
+            </div>
+            <div className="top-performances-list">
+                {topThree.map((entry, index) => (
+                    <div key={entry.user_id} className="performance-item">
+                        <span className="performance-rank">{index + 1}.</span>
+                        <div className="performance-avatar">
+                             {getInitials(entry.profiles?.full_name)}
+                        </div>
+                        <span className="performance-name">{entry.profiles?.full_name}</span>
+                        <span className="performance-score">{entry.score.toFixed(1)}</span>
+                    </div>
+                ))}
+            </div>
+            {currentUserRank !== -1 && (
+                <p className="current-user-rank">You have ranked #{currentUserRank + 1} this week</p>
+            )}
+        </section>
+    );
+};
+
+
+const MyCasesTab = () => {
+    const { caseLogs } = useAppContext();
+
+    const getSpecialtyIcon = (specialty: Specialty) => {
+        const icons: Record<Specialty, React.FC> = {
+            'Cardiology': IconHeart,
+            'Neurology': IconBrain,
+            'Surgery': IconScalpel,
+            'Pediatrics': IconBaby,
+            'Obstetrics & Gynecology': IconBaby,
+            'Psychiatry': IconBrain,
+            'Dermatology': IconUser,
+            'Emergency Medicine': IconActivity,
+            'Internal Medicine': IconStethoscope
+        };
+        return icons[specialty] || IconStethoscope;
+    };
+    
+    if (caseLogs.length === 0) {
+        return <div className="empty-state">You haven't completed any cases yet. Go to the "Case" tab to start one!</div>;
+    }
+    
+    const getScoreColor = (score: number) => {
+        if (score >= 90) return 'green';
+        if (score >= 75) return 'orange';
+        return 'red';
+    };
+
+    return (
+        <div className="my-cases-view">
+            {caseLogs[0] && <ResumeCaseCard lastCase={caseLogs[0]} />}
+
+            <h3 className="view-section-title">Case History</h3>
+            <div className="case-history-list">
+                {caseLogs.map(log => {
+                    const details = log.case_details;
+                    const specialty = inferSpecialtyFromTitle(log.case_title);
+                    const Icon = getSpecialtyIcon(specialty);
+                    const scorePercent = Math.round(log.score * 10);
+                    const trainingPhaseTag = details.tags 
+                        ? details.tags.trainingPhase 
+                        : (details.diagnosisCorrect ? 'Clinical' : 'Para-clinical');
+
+                    return (
+                        <div key={log.id} className="case-history-item">
+                            <div className="case-history-icon-wrapper"><Icon /></div>
+                            <div className="case-history-details">
+                                <h4>{log.case_title}</h4>
+                                <div className="case-history-tags">
+                                    <span>{specialty}</span>
+                                    <span>{trainingPhaseTag}</span>
+                                </div>
+                            </div>
+                            <div className="case-history-meta">
+                                <span className={`case-history-score score-${getScoreColor(scorePercent)}`}>
+                                    <IconCheckCircle /> {scorePercent}%
+                                </span>
+                                <span className="case-history-time">{timeAgo(log.created_at)}</span>
+                            </div>
+                        </div>
+                    )
+                })}
+            </div>
+        </div>
+    );
+};
+
+const RadarChart = ({ data }: { data: { label: string, value: number }[] }) => {
+    const size = 200;
+    const center = size / 2;
+    const radius = size * 0.4;
+    const angleSlice = (Math.PI * 2) / data.length;
+
+    const points = data.map((d, i) => {
+        const angle = angleSlice * i - Math.PI / 2;
+        const x = center + radius * (d.value / 100) * Math.cos(angle);
+        const y = center + radius * (d.value / 100) * Math.sin(angle);
+        return `${x},${y}`;
+    }).join(' ');
+
+    const axisPoints = Array.from({ length: data.length }, (_, i) => {
+        const angle = angleSlice * i - Math.PI / 2;
+        const x = center + radius * Math.cos(angle);
+        const y = center + radius * Math.sin(angle);
+        return { x, y, label: data[i].label };
+    });
+
+    return (
+        <svg className="radar-chart-svg" viewBox={`0 0 ${size} ${size}`}>
+            {/* Axes and Labels */}
+            {axisPoints.map((p, i) => (
+                <g key={i}>
+                    <line x1={center} y1={center} x2={p.x} y2={p.y} stroke="var(--color-border)" strokeWidth="0.5" />
+                    <text x={p.x} y={p.y} dy={p.y > center ? 10 : -5} textAnchor="middle" fontSize="6" fill="var(--color-text-secondary)">{p.label}</text>
+                </g>
+            ))}
+            {/* Data Polygon */}
+            <polygon points={points} fill="rgba(74, 108, 253, 0.4)" stroke="var(--color-primary)" strokeWidth="1.5" />
+        </svg>
+    );
+};
+
+const DonutChart = ({ percentage, color, label }: { percentage: number, color: string, label: string }) => {
+    const size = 80;
+    const strokeWidth = 8;
+    const radius = (size - strokeWidth) / 2;
+    const circumference = 2 * Math.PI * radius;
+    const offset = circumference - (percentage / 100) * circumference;
+
+    return (
+        <div className="donut-chart-container">
+            <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+                <circle
+                    className="donut-background"
+                    cx={size / 2} cy={size / 2} r={radius}
+                    strokeWidth={strokeWidth}
+                />
+                <circle
+                    className="donut-foreground"
+                    cx={size / 2} cy={size / 2} r={radius}
+                    strokeWidth={strokeWidth}
+                    stroke={color}
+                    strokeDasharray={circumference}
+                    strokeDashoffset={offset}
+                />
+                <text x="50%" y="50%" textAnchor="middle" dy="0.3em" className="donut-percentage">
+                    {percentage.toFixed(0)}%
+                </text>
+            </svg>
+            <span className="donut-label">{label}</span>
+        </div>
+    );
+};
+
+const PerformanceTab = () => {
+    const { caseLogs, streak } = useAppContext();
+    
+    const performanceData = useMemo(() => {
+        if (!caseLogs) {
+             return {
+                casesToday: 0, casesThisWeek: 0, casesOverall: 0,
+                accuracyToday: 0, accuracyThisWeek: 0, accuracyOverall: 0,
+                specialtyStats: [], radarData: []
+            };
+        }
+        
+        const today = new Date();
+        const oneWeekAgo = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 7);
+
+        const logsToday = caseLogs.filter(log => new Date(log.created_at).toDateString() === today.toDateString());
+        const logsThisWeek = caseLogs.filter(log => new Date(log.created_at) >= oneWeekAgo);
+
+        const calcAccuracy = (logs: CaseLog[]) => {
+            if (logs.length === 0) return 0;
+            const correct = logs.filter(l => l.case_details.diagnosisCorrect).length;
+            return (correct / logs.length) * 100;
+        };
+        
+        const overallAccuracy = calcAccuracy(caseLogs);
+        
+        const epaHistoryTaking = caseLogs.length > 0
+            ? caseLogs.reduce((acc, log) => acc + log.case_details.epaScores.history, 0) / caseLogs.length
+            : 0;
+
+        const epaPhysicalExam = caseLogs.length > 0
+            ? caseLogs.reduce((acc, log) => acc + log.case_details.epaScores.physicalExam, 0) / caseLogs.length
+            : 0;
+            
+        const knowledgeScores = caseLogs.filter(l => l.case_details.mcqTotal > 0);
+        const knowledgeAccuracy = knowledgeScores.length > 0 
+            ? (knowledgeScores.reduce((acc, log) => acc + (log.case_details.mcqCorrectCount / log.case_details.mcqTotal), 0) / knowledgeScores.length) * 100
+            : 75; // Default if no MCQs taken
+
+        const specialtyStats = ALL_SPECIALTIES.map(specialty => {
+            const specialtyLogs = caseLogs.filter(log => inferSpecialtyFromTitle(log.case_title) === specialty);
+            if (specialtyLogs.length === 0) return { name: specialty, score: 0, cases: 0 };
+            const totalScore = specialtyLogs.reduce((acc, log) => acc + log.score, 0);
+            return { name: specialty, score: (totalScore / specialtyLogs.length) * 10, cases: specialtyLogs.length };
+        });
+
+        return {
+            casesToday: logsToday.length,
+            casesThisWeek: logsThisWeek.length,
+            casesOverall: caseLogs.length,
+            accuracyToday: calcAccuracy(logsToday),
+            accuracyThisWeek: calcAccuracy(logsThisWeek),
+            accuracyOverall: overallAccuracy,
+            specialtyStats,
+            radarData: [
+                { label: 'Diagnosis', value: overallAccuracy },
+                { label: 'Knowledge', value: knowledgeAccuracy },
+                { label: 'History', value: epaHistoryTaking * 10 },
+                { label: 'Exam', value: epaPhysicalExam * 10 }
+            ]
+        };
+    }, [caseLogs]);
+
+    const getProgressBarColor = (score: number) => {
+        if (score >= 80) return '#34C759'; // green
+        if (score >= 50) return '#FF9500'; // orange
+        return '#FF3B30'; // red
+    };
+
+    return (
+        <div className="performance-view">
+            <div className="your-progress-card">
+                <div className="your-progress-header">
+                    <h3>YOUR PROGRESS</h3>
+                    <p>Track your medical simulation journey</p>
+                </div>
+                <div className="your-progress-content">
+                    <RadarChart data={performanceData.radarData} />
+                </div>
+            </div>
+
+            <div className="performance-section">
+                <h3>CASES COMPLETED</h3>
+                <div className="cases-completed-grid">
+                    <div className="stat-box"><span>{performanceData.casesToday}</span><p>Today</p></div>
+                    <div className="stat-box"><span>{performanceData.casesThisWeek}</span><p>This Week</p></div>
+                    <div className="stat-box"><span>{performanceData.casesOverall}</span><p>Overall</p></div>
+                </div>
+            </div>
+            
+             <div className="performance-section">
+                <h3>STREAK</h3>
+                <div className="streak-card-performance">
+                    <span>{streak?.current_streak ?? 0}</span>
+                    <p>Awesome! You have completed at least 1 case for {streak?.current_streak ?? 0} days.</p>
+                </div>
+            </div>
+            
+             <div className="performance-section">
+                <h3>ACCURACY</h3>
+                <div className="accuracy-donuts-container">
+                    <DonutChart percentage={performanceData.accuracyToday} color="#34C759" label="Today"/>
+                    <DonutChart percentage={performanceData.accuracyThisWeek} color="#007AFF" label="This Week"/>
+                    <DonutChart percentage={performanceData.accuracyOverall} color="#AF52DE" label="Overall"/>
+                </div>
+            </div>
+
+             <div className="performance-section">
+                <h3>SPECIALTY EXPERIENCE</h3>
+                <div className="specialty-experience-list">
+                    {performanceData.specialtyStats.map(stat => (
+                         <div key={stat.name} className="specialty-progress-item">
+                             <div className="specialty-progress-info">
+                                <span>{stat.name}</span>
+                                <span>{stat.score.toFixed(1)} / 100 Score</span>
+                             </div>
+                             <div className="progress-bar-container">
+                                 <div className="progress-bar-fill" style={{ width: `${stat.score}%`, backgroundColor: getProgressBarColor(stat.score) }}></div>
+                             </div>
+                         </div>
+                    ))}
+                </div>
+            </div>
+
+        </div>
+    );
+};
+
+
+const ProgressPage = () => {
+    const [activeProgressTab, setActiveProgressTab] = useState<'cases' | 'performance'>('cases');
+
+    return (
+        <div className="progress-page">
+            <div className="progress-tabs">
+                <button className={activeProgressTab === 'cases' ? 'active' : ''} onClick={() => setActiveProgressTab('cases')}>My Cases</button>
+                <button className={activeProgressTab === 'performance' ? 'active' : ''} onClick={() => setActiveProgressTab('performance')}>Performance</button>
+            </div>
+            <div className="progress-content">
+                {activeProgressTab === 'cases' ? <MyCasesTab /> : <PerformanceTab />}
+            </div>
+        </div>
+    );
+};
+
+const LeaderboardPodium = ({ topThree }: { topThree: LeaderboardEntry[] }) => {
+    const sortedTopThree = [...topThree];
+    // Ensure correct order for podium display: 2nd, 1st, 3rd
+    if (sortedTopThree.length === 3) {
+      [sortedTopThree[0], sortedTopThree[1]] = [sortedTopThree[1], sortedTopThree[0]]; // Swap 1st and 2nd
+    }
+    
+    return (
+      <div className="leaderboard-podium">
+        {sortedTopThree.map((entry, index) => {
+          // Adjust rank based on sorted position
+          let rank = index + 1;
+          if (sortedTopThree.length === 3) {
+            if (index === 0) rank = 2;
+            if (index === 1) rank = 1;
+            if (index === 2) rank = 3;
+          }
+  
+          return (
+            <div key={entry.user_id} className={`podium-item podium-item-${rank}`}>
+              <div className="podium-avatar">
+                {getInitials(entry.profiles?.full_name)}
+                <div className="podium-rank">{rank}</div>
+              </div>
+              <span className="podium-name">{entry.profiles?.full_name || 'Anonymous'}</span>
+              <div className="podium-stats">
+                  <span><IconTarget/> {entry.accuracy}%</span>
+                  <span><IconFlame/> {entry.streak}</span>
+              </div>
+              <div className="podium-score">{entry.score.toFixed(2)}</div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+  
+  const LeaderboardList = ({ list }: { list: LeaderboardEntry[] }) => {
+    return (
+      <div className="leaderboard-list">
+        <div className="leaderboard-list-header">
+          <span>Name</span>
+          <span>Accuracy</span>
+          <span>Streak</span>
+          <span>Medscore</span>
+        </div>
+        {list.map((entry, index) => (
+          <div key={entry.user_id} className="leaderboard-list-item">
+            <div className="leaderboard-list-name">
+              <span className="leaderboard-list-rank">{index + 4}.</span>
+              <div className="leaderboard-list-avatar">{getInitials(entry.profiles?.full_name)}</div>
+              <span>{entry.profiles?.full_name || 'Anonymous'}</span>
+            </div>
+            <span>{entry.accuracy}%</span>
+            <span><IconFlame /> {entry.streak}</span>
+            <span className="leaderboard-list-medscore">{entry.score.toFixed(2)}</span>
+          </div>
+        ))}
+      </div>
+    );
+  };
+  
+  const LeaderboardPage = () => {
+    const { leaderboard } = useAppContext();
+  
+    const topThree = leaderboard.slice(0, 3);
+    const restOfList = leaderboard.slice(3);
+  
+    return (
+      <div className="leaderboard-page">
+        <header className="leaderboard-page-header">
+            <h2>Leaderboard</h2>
+        </header>
+        <div className="leaderboard-content">
+            <div className="top-performances-card">
+                <div className="top-performances-title">
+                    <IconCrown/> Top Performances
+                </div>
+                <LeaderboardPodium topThree={topThree} />
+            </div>
+            {restOfList.length > 0 && <LeaderboardList list={restOfList}/>}
+        </div>
+      </div>
+    );
+  };
+
 
 const HomePage = () => {
-    const { profile, homeTab, setHomeTab, isMobile } = useAppContext();
+    const { profile, homeTab, setHomeTab, isMobile, caseLogs } = useAppContext();
 
-    const renderContent = () => {
+    const renderMobileContent = () => {
         switch(homeTab) {
-            case 'activity': return <ActivityLogTab />;
-            case 'leaderboard': return <LeaderboardTab />;
-            case 'new-case':
+            case 'case': return <NewCaseTab />;
+            case 'progress': return <ProgressPage />;
+            case 'leaderboard': return <LeaderboardPage />;
+            case 'home':
             default:
-                return <NewCaseTab />;
+                return (
+                    <div className="home-dashboard">
+                        <PromoBanner />
+                        {caseLogs && caseLogs.length > 0 && <ResumeCaseCard lastCase={caseLogs[0]} />}
+                        <StartSimCard onStart={() => setHomeTab('case')} />
+                        <QuickActions />
+                        <TopPerformances />
+                    </div>
+                );
         }
     }
 
     if (isMobile) {
         return (
             <main className="app-container home-page mobile-view">
-                <div className="home-header">
-                    <h1>Welcome, {profile?.full_name?.split(' ')[0] || 'Doctor'}!</h1>
-                </div>
-                <DashboardMetrics />
                 <div className="home-content-mobile">
-                    {renderContent()}
+                    {renderMobileContent()}
                 </div>
-                {homeTab === 'new-case' && <FAB />}
                 <BottomNavBar />
             </main>
         )
@@ -1269,11 +1805,11 @@ const HomePage = () => {
                 </div>
                 <div className="home-page-main">
                     <div className="home-tab-nav">
-                        <button className={`tab-nav-button ${homeTab === 'new-case' ? 'active' : ''}`} onClick={() => setHomeTab('new-case')}>
+                        <button className={`tab-nav-button ${homeTab === 'case' ? 'active' : ''}`} onClick={() => setHomeTab('case')}>
                             <IconStethoscope/> New Case
                         </button>
-                        <button id="activity" className={`tab-nav-button ${homeTab === 'activity' ? 'active' : ''}`} onClick={() => setHomeTab('activity')}>
-                            <IconFileText/> My Activity
+                        <button id="progress" className={`tab-nav-button ${homeTab === 'progress' ? 'active' : ''}`} onClick={() => setHomeTab('progress')}>
+                            <IconTrendingUp/> Progress
                         </button>
                         <button id="leaderboard" className={`tab-nav-button ${homeTab === 'leaderboard' ? 'active' : ''}`} onClick={() => setHomeTab('leaderboard')}>
                             <IconTrophy/> Leaderboard
@@ -1281,7 +1817,7 @@ const HomePage = () => {
                     </div>
                     
                     <div className="home-content">
-                       {renderContent()}
+                       {homeTab === 'case' ? <NewCaseTab /> : homeTab === 'progress' ? <ProgressPage /> : <LeaderboardPage />}
                     </div>
                 </div>
                 <div className="home-page-right">
@@ -1795,7 +2331,7 @@ const SimulationPage = () => {
             let finalScore = diagnosisScore + knowledgeScore + historyTakingScore + physicalExamScore - hintPenalty;
             finalScore = Math.max(0, Math.min(10, finalScore)); // Clamp score between 0 and 10
 
-            const caseResultDetails = {
+            const caseResultDetails: CaseResultDetails = {
                 diagnosisCorrect,
                 mcqCorrectCount,
                 mcqTotal,
@@ -1807,12 +2343,13 @@ const SimulationPage = () => {
                     knowledge: knowledgeScore,
                     historyTaking: historyTakingScore,
                     physicalExam: physicalExamScore,
-                }
+                },
+                tags: currentCase.tags,
             };
             
             await logCompletedCase({
                 case_title: currentCase.title,
-                case_details: JSON.stringify(caseResultDetails),
+                case_details: caseResultDetails,
                 score: finalScore,
             });
             
@@ -2296,7 +2833,7 @@ const ChatWindow = ({ chat, messages, setMessages, setLatestPatientMessage, onRe
 
 // --- MAIN APP COMPONENT ---
 const App = () => {
-    const { session, isAuthLoading, page, isGenerating } = useAppContext();
+    const { session, isAuthLoading, page, homeTab, isGenerating, isMobile, isMobileMenuOpen, setIsMobileMenuOpen } = useAppContext();
 
     const renderPage = () => {
         if (isAuthLoading) {
@@ -2317,6 +2854,7 @@ const App = () => {
         <div className="app-wrapper">
            {page !== 'simulation' && <AppHeader/>}
            {isGenerating && <GeneratingCaseSplash />}
+           {isMobile && isMobileMenuOpen && <MobileProfileMenu onClose={() => setIsMobileMenuOpen(false)} />}
            {renderPage()}
         </div>
     )

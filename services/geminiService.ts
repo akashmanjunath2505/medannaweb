@@ -7,10 +7,10 @@ import { GoogleGenAI, Type, Chat } from "@google/genai";
 export type { Chat };
 
 // --- TYPE DEFINITIONS (mirror from index.tsx) ---
-type Specialty = 'Internal Medicine' | 'Pediatrics' | 'Surgery' | 'Obstetrics & Gynecology' | 'Psychiatry' | 'Cardiology' | 'Neurology' | 'Dermatology' | 'Emergency Medicine';
-type TrainingPhase = 'Pre-clinical' | 'Para-clinical' | 'Clinical' | 'Internship' | 'NExT/FMGE Prep';
-type CognitiveSkill = 'Recall' | 'Application' | 'Analysis';
-type EPA = 'History-taking' | 'Physical Exam' | 'Diagnosis' | 'Management';
+export type Specialty = 'Internal Medicine' | 'Pediatrics' | 'Surgery' | 'Obstetrics & Gynecology' | 'Psychiatry' | 'Cardiology' | 'Neurology' | 'Dermatology' | 'Emergency Medicine';
+export type TrainingPhase = 'Pre-clinical' | 'Para-clinical' | 'Clinical' | 'Internship' | 'NExT/FMGE Prep';
+export type CognitiveSkill = 'Recall' | 'Application' | 'Analysis';
+export type EPA = 'History-taking' | 'Physical Exam' | 'Diagnosis' | 'Management';
 
 interface Diagnosis {
     diagnosis: string;

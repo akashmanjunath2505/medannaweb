@@ -3,8 +3,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { createClient, Session, User, AuthError } from '@supabase/supabase-js';
+import { TrainingPhase, Specialty, CognitiveSkill, EPA } from './geminiService';
 
 // --- DATABASE SCHEMA (DEFINED FIRST FOR TYPE RESOLUTION) ---
+
+// Define Json type to prevent recursion with complex objects.
+export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: Json | undefined }
+  | Json[];
 
 // Define the specific shape of the case_details JSON object for type safety.
 // This resolves issues with recursive type definitions that can cause compiler errors.
@@ -21,17 +31,34 @@ export interface CaseResultDetails {
     historyTaking: number;
     physicalExam: number;
   };
+  tags: {
+    trainingPhase: TrainingPhase;
+    specialty: Specialty;
+    cognitiveSkill: CognitiveSkill;
+    epas: EPA[];
+    curriculum: {
+        framework: 'CBME/NExT';
+        competency: string;
+    };
+  };
 }
 
-// The previous definition of NotificationTypeEnum and its usage was causing a circular dependency
-// that made TypeScript's type inference fail for Supabase client methods. By defining the enum
-// directly inside the Database type and referencing it internally, we break the cycle and fix the errors.
+
+// To fix TypeScript errors related to "Type instantiation is excessively deep and possibly infinite",
+// we must avoid circular type references. The original `Database` type had its tables refer back to
+// the `Database` type itself to get an enum definition, creating a loop.
+//
+// The fix is to define the enum type *outside* of the `Database` type. This breaks the recursion,
+// allowing TypeScript's type inference to work correctly for Supabase client methods like `update` and `insert`.
+export type NotificationTypeEnum = "achievement" | "reminder" | "new_feature" | "system_message" | "leaderboard";
+
+
 export type Database = {
   public: {
     Tables: {
       case_logs: {
         Row: {
-          case_details: any
+          case_details: CaseResultDetails
           case_title: string
           created_at: string
           id: number
@@ -39,7 +66,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
-          case_details: any
+          case_details: CaseResultDetails
           case_title: string
           created_at?: string
           id?: number
@@ -47,7 +74,7 @@ export type Database = {
           user_id: string
         }
         Update: {
-          case_details?: any
+          case_details?: CaseResultDetails
           case_title?: string
           created_at?: string
           id?: number
@@ -77,7 +104,7 @@ export type Database = {
           link: string | null
           message: string
           title: string
-          type: Database["public"]["Enums"]["notification_type"]
+          type: NotificationTypeEnum
           user_id: string
         }
         Insert: {
@@ -87,7 +114,7 @@ export type Database = {
           link?: string | null
           message: string
           title: string
-          type: Database["public"]["Enums"]["notification_type"]
+          type: NotificationTypeEnum
           user_id: string
         }
         Update: {
@@ -97,7 +124,7 @@ export type Database = {
           link?: string | null
           message?: string
           title?: string
-          type?: Database["public"]["Enums"]["notification_type"]
+          type?: NotificationTypeEnum
           user_id?: string
         }
       }
@@ -161,9 +188,6 @@ export type Database = {
     }
     Views: {}
     Functions: {}
-    Enums: {
-      notification_type: "achievement" | "reminder" | "new_feature" | "system_message" | "leaderboard"
-    }
     CompositeTypes: {}
   }
 }
@@ -180,8 +204,7 @@ if (!supabaseUrl || !supabaseAnonKey) {
 export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey);
 
 // --- TYPE DEFINITIONS ---
-type TrainingPhase = 'Pre-clinical' | 'Para-clinical' | 'Clinical' | 'Internship' | 'NExT/FMGE Prep';
-
+// type TrainingPhase is imported from geminiService
 // Derive types from the Database schema for type safety.
 export type Profile = Database['public']['Tables']['profiles']['Row'] & {
   training_phase: TrainingPhase | null;
@@ -190,11 +213,13 @@ export type Streak = Database['public']['Tables']['streaks']['Row'];
 export type CaseLog = Database['public']['Tables']['case_logs']['Row'];
 export type Notification = Database['public']['Tables']['notifications']['Row'];
 // This type is derived from the enum inside the Database schema for a single source of truth.
-export type NotificationType = Database['public']['Enums']['notification_type'];
+export type NotificationType = NotificationTypeEnum;
 
 export type LeaderboardEntry = {
   user_id: string;
   score: number;
+  accuracy: number;
+  streak: number;
   profiles: {
     full_name: string | null;
   } | null;
@@ -348,7 +373,7 @@ export const getStreak = async(userId: string): Promise<Streak | null> => {
 
 export const logCaseCompletion = async (
   userId: string,
-  caseResult: { case_title: string; case_details: string; score: number }
+  caseResult: { case_title: string; case_details: CaseResultDetails; score: number }
 ): Promise<void> => {
     try {
         const todayUTC = new Date();
@@ -380,7 +405,7 @@ export const logCaseCompletion = async (
         const caseLogInsert: Database['public']['Tables']['case_logs']['Insert'] = {
             user_id: userId,
             case_title: caseResult.case_title,
-            case_details: JSON.parse(caseResult.case_details),
+            case_details: caseResult.case_details,
             score: caseResult.score,
         };
 
@@ -447,7 +472,7 @@ export const logCaseCompletion = async (
             title: `Case Completed!`,
             message: `You scored ${caseResult.score.toFixed(1)}/10 on "${caseResult.case_title}".`,
             type: 'achievement',
-            link: '#activity'
+            link: '#progress'
         };
 
         // --- 3. EXECUTE all writes ---
@@ -477,20 +502,20 @@ export const logCaseCompletion = async (
 
 // --- LEADERBOARD ---
 const botUsers: LeaderboardEntry[] = [
-    { user_id: 'bot_1', score: 9.8, profiles: { full_name: 'Dr. Axiom' } },
-    { user_id: 'bot_2', score: 9.5, profiles: { full_name: 'Doc Synth' } },
-    { user_id: 'bot_3', score: 9.2, profiles: { full_name: 'Prognosis Pete' } },
-    { user_id: 'bot_4', score: 8.9, profiles: { full_name: 'Data-driven Dana' } },
-    { user_id: 'bot_5', score: 8.5, profiles: { full_name: 'Medibot 3000' } },
-    { user_id: 'bot_6', score: 8.2, profiles: { full_name: 'Holistic Hal' } },
-    { user_id: 'bot_7', score: 7.9, profiles: { full_name: 'Clinical AI' } },
-    { user_id: 'bot_8', score: 7.5, profiles: { full_name: 'Virtual Vivian' } },
-    { user_id: 'bot_9', score: 7.2, profiles: { full_name: 'Synapse Sam' } },
-    { user_id: 'bot_10', score: 6.8, profiles: { full_name: 'Algorithmic Alex' } },
+    { user_id: 'bot_1', score: 9.8, accuracy: 99, streak: 150, profiles: { full_name: 'Dr. Axiom' } },
+    { user_id: 'bot_2', score: 9.5, accuracy: 98, streak: 120, profiles: { full_name: 'Doc Synth' } },
+    { user_id: 'bot_3', score: 9.2, accuracy: 95, streak: 210, profiles: { full_name: 'Prognosis Pete' } },
+    { user_id: 'bot_4', score: 8.9, accuracy: 92, streak: 95, profiles: { full_name: 'Data-driven Dana' } },
+    { user_id: 'bot_5', score: 8.5, accuracy: 90, streak: 180, profiles: { full_name: 'Medibot 3000' } },
+    { user_id: 'bot_6', score: 8.2, accuracy: 88, streak: 88, profiles: { full_name: 'Holistic Hal' } },
+    { user_id: 'bot_7', score: 7.9, accuracy: 85, streak: 75, profiles: { full_name: 'Clinical AI' } },
+    { user_id: 'bot_8', score: 7.5, accuracy: 84, streak: 60, profiles: { full_name: 'Virtual Vivian' } },
+    { user_id: 'bot_9', score: 7.2, accuracy: 82, streak: 50, profiles: { full_name: 'Synapse Sam' } },
+    { user_id: 'bot_10', score: 6.8, accuracy: 80, streak: 45, profiles: { full_name: 'Algorithmic Alex' } },
 ];
 
 export const getLeaderboard = async (): Promise<LeaderboardEntry[]> => {
-    // 1. Fetch leaderboard scores
+    // 1. Fetch top 20 users by score
     const { data: leaderboardData, error: leaderboardError } = await supabase
         .from('leaderboard')
         .select('user_id, score')
@@ -499,48 +524,61 @@ export const getLeaderboard = async (): Promise<LeaderboardEntry[]> => {
 
     if (leaderboardError) {
         console.error('Error fetching leaderboard:', leaderboardError.message);
-        return botUsers; // Return bots if fetching fails
-    }
-
-    const realUsers = leaderboardData || [];
-    
-    // Combine with bots even if no real users, to show a populated leaderboard
-    if (realUsers.length === 0) {
         return botUsers.sort((a, b) => b.score - a.score);
     }
-    
-    const userIds = realUsers.map(u => u.user_id);
 
-    // 2. Fetch profiles for these users
-    const { data: profilesData, error: profilesError } = await supabase
-        .from('profiles')
-        .select('id, full_name')
-        .in('id', userIds);
-
-    let realUsersWithProfiles: LeaderboardEntry[];
-
-    if (profilesError) {
-        console.error('Error fetching profiles for leaderboard:', profilesError.message);
-        // Continue with user_ids but no names
-        realUsersWithProfiles = realUsers.map(u => ({
-            ...u,
-            profiles: { full_name: 'Anonymous' },
-        }));
-    } else {
-        const profilesMap = new Map(profilesData.map(p => [p.id, p.full_name]));
-        // 3. Combine leaderboard data with profile data
-        realUsersWithProfiles = realUsers.map(u => ({
-            ...u,
-            profiles: { full_name: profilesMap.get(u.user_id) || 'Anonymous' }
-        }));
+    if (leaderboardData.length === 0) {
+        return botUsers.sort((a, b) => b.score - a.score);
     }
 
-    // 4. Filter out any real users that might be duplicated by bots and combine
-    const realUserIds = new Set(realUsers.map(u => u.user_id));
+    const userIds = leaderboardData.map(u => u.user_id);
+
+    // 2. Fetch profiles, streaks, and case logs for these users concurrently
+    const [profilesResult, streaksResult, caseLogsResult] = await Promise.all([
+        supabase.from('profiles').select('id, full_name').in('id', userIds),
+        supabase.from('streaks').select('user_id, current_streak').in('user_id', userIds),
+        supabase.from('case_logs').select('user_id, case_details').in('user_id', userIds)
+    ]);
+    
+    if (profilesResult.error) console.error('Error fetching profiles for leaderboard:', profilesResult.error.message);
+    if (streaksResult.error) console.error('Error fetching streaks for leaderboard:', streaksResult.error.message);
+    if (caseLogsResult.error) console.error('Error fetching case logs for leaderboard:', caseLogsResult.error.message);
+
+    const profilesMap = new Map(profilesResult.data?.map(p => [p.id, p.full_name || 'Anonymous']));
+    const streaksMap = new Map(streaksResult.data?.map(s => [s.user_id, s.current_streak || 0]));
+    
+    // 3. Calculate accuracy for each user
+    const accuracyMap = new Map<string, number>();
+    const userCaseStats: Record<string, { correct: number, total: number }> = {};
+
+    (caseLogsResult.data || []).forEach(log => {
+        if (!userCaseStats[log.user_id]) {
+            userCaseStats[log.user_id] = { correct: 0, total: 0 };
+        }
+        userCaseStats[log.user_id].total++;
+        if ((log.case_details as CaseResultDetails).diagnosisCorrect) {
+            userCaseStats[log.user_id].correct++;
+        }
+    });
+
+    Object.keys(userCaseStats).forEach(userId => {
+        const { correct, total } = userCaseStats[userId];
+        accuracyMap.set(userId, total > 0 ? Math.round((correct / total) * 100) : 0);
+    });
+
+    // 4. Combine all data
+    const realUsersWithDetails: LeaderboardEntry[] = leaderboardData.map(user => ({
+        user_id: user.user_id,
+        score: user.score,
+        profiles: { full_name: profilesMap.get(user.user_id) || 'Anonymous' },
+        streak: streaksMap.get(user.user_id) || 0,
+        accuracy: accuracyMap.get(user.user_id) || 0,
+    }));
+
+    // 5. Merge with bots, sort, and return top results
+    const realUserIds = new Set(realUsersWithDetails.map(u => u.user_id));
     const filteredBots = botUsers.filter(b => !realUserIds.has(b.user_id));
+    const combinedList = [...realUsersWithDetails, ...filteredBots];
 
-    const combined: LeaderboardEntry[] = [...realUsersWithProfiles, ...filteredBots];
-
-    // 5. Sort by score descending and take the top 20
-    return combined.sort((a, b) => (b.score || 0) - (a.score || 0)).slice(0, 20);
-}
+    return combinedList.sort((a, b) => b.score - a.score).slice(0, 20);
+};
