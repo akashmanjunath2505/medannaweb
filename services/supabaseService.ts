@@ -58,7 +58,7 @@ export type Database = {
     Tables: {
       case_logs: {
         Row: {
-          case_details: CaseResultDetails
+          case_details: Json | null
           case_title: string
           created_at: string
           id: number
@@ -66,7 +66,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
-          case_details: CaseResultDetails
+          case_details: Json | null
           case_title: string
           created_at?: string
           id?: number
@@ -74,7 +74,7 @@ export type Database = {
           user_id: string
         }
         Update: {
-          case_details?: CaseResultDetails
+          case_details?: Json | null
           case_title?: string
           created_at?: string
           id?: number
@@ -405,7 +405,7 @@ export const logCaseCompletion = async (
         const caseLogInsert: Database['public']['Tables']['case_logs']['Insert'] = {
             user_id: userId,
             case_title: caseResult.case_title,
-            case_details: caseResult.case_details,
+            case_details: caseResult.case_details as Json,
             score: caseResult.score,
         };
 
@@ -556,7 +556,7 @@ export const getLeaderboard = async (): Promise<LeaderboardEntry[]> => {
             userCaseStats[log.user_id] = { correct: 0, total: 0 };
         }
         userCaseStats[log.user_id].total++;
-        if ((log.case_details as CaseResultDetails).diagnosisCorrect) {
+        if ((log.case_details as CaseResultDetails | null)?.diagnosisCorrect) {
             userCaseStats[log.user_id].correct++;
         }
     });
