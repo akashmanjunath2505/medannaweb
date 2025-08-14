@@ -69,13 +69,6 @@ export interface GenerationFilters {
     challengeMode?: boolean;
 }
 
-export interface EPAScore {
-    epa: 'History-taking' | 'Physical Exam';
-    score: number;
-    justification: string;
-}
-
-
 // --- GEMINI API SERVICE ---
 
 function getAi(): GoogleGenAI {
@@ -324,71 +317,6 @@ export async function generateHint(caseData: DiagnosticCase, chatHistory: ChatMe
     return response.text.trim();
 }
 
-export async function evaluateChatForEPAs(caseData: DiagnosticCase, chatHistory: ChatMessage[]): Promise<EPAScore[]> {
-    const aiInstance = getAi();
-    // Filter out patient thinking messages for cleaner history
-    const history = chatHistory
-      .filter(m => m.text !== 'Thinking...')
-      .map(m => `${m.sender}: ${m.text}`).join('\n');
-
-    const prompt = `
-        You are a medical education expert. Your task is to evaluate a student's performance in a clinical simulation based on their conversation with the patient.
-        You will score their performance on two Entrustable Professional Activities (EPAs): History-taking and Physical Exam.
-
-        **Case Information:**
-        - **History of Present Illness (Key Information to be gathered):** ${caseData.historyOfPresentIllness}
-        - **Physical Exam Findings (Key findings to be elicited):** ${caseData.physicalExam}
-        - **Correct Diagnosis:** ${caseData.potentialDiagnoses.find(d => d.isCorrect)?.diagnosis}
-
-        **Student's Conversation with Patient:**
-        ${history}
-
-        **Evaluation Instructions:**
-        1.  **History-taking Score:** Analyze the conversation. Did the student ask questions that successfully elicited the key information from the 'History of Present Illness'? Score them from 0 (no relevant questions) to 10 (elicited all crucial details). Provide a brief justification for your score.
-        2.  **Physical Exam Score:** Analyze the conversation. Did the student ask for the relevant physical exams that would lead to the findings listed in 'Physical Exam Findings'? They don't need to ask for every single exam, but they should ask for the ones that reveal the most important diagnostic clues. Score them from 0 to 10. Provide a brief justification.
-
-        Respond with a JSON object that strictly adheres to the following schema. The output MUST be an array of two objects, one for each EPA.
-    `;
-    
-    const responseSchema = {
-        type: Type.ARRAY,
-        items: {
-            type: Type.OBJECT,
-            properties: {
-                epa: { type: Type.STRING, enum: ['History-taking', 'Physical Exam'] },
-                score: { type: Type.NUMBER, description: "A score from 0 to 10." },
-                justification: { type: Type.STRING }
-            },
-            required: ["epa", "score", "justification"]
-        }
-    };
-
-    const response = await aiInstance.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: prompt,
-        config: {
-            responseMimeType: "application/json",
-            responseSchema,
-        }
-    });
-
-    try {
-        const jsonText = response.text.trim();
-        const parsed = JSON.parse(jsonText) as EPAScore[];
-        if (parsed.length !== 2 || !parsed.find(p => p.epa === 'History-taking') || !parsed.find(p => p.epa === 'Physical Exam')) {
-            throw new Error("Invalid EPA evaluation format returned.");
-        }
-        return parsed;
-    } catch (e) {
-        console.error("Failed to parse EPA evaluation:", response.text, e);
-        // Return a default/error state
-        return [
-            { epa: 'History-taking', score: 0, justification: 'Evaluation failed due to an AI error.' },
-            { epa: 'Physical Exam', score: 0, justification: 'Evaluation failed due to an AI error.' }
-        ];
-    }
-}
-
 
 // --- VIDEO SELECTION LOGIC ---
 interface AvatarData {
@@ -401,6 +329,12 @@ interface AvatarData {
         talking: string; // video ID
     };
 }
+
+type AvatarResult = {
+    idle: string | null;
+    talking: string | null;
+    gender: 'Male' | 'Female' | null;
+};
 
 // Data is now structured in pairs, ensuring idle/talking videos are from the same avatar.
 const AVATAR_DATA: AvatarData[] = [
@@ -418,7 +352,7 @@ const AVATAR_DATA: AvatarData[] = [
 ];
 
 // A deterministic fallback in case the LLM fails
-function findBestFallback(patientProfile: DiagnosticCase['patientProfile']): { idle: string | null; talking: string | null } {
+function findBestFallback(patientProfile: DiagnosticCase['patientProfile']): AvatarResult {
     const { age, gender } = patientProfile;
     
     const candidates = AVATAR_DATA.filter(avatar => 
@@ -451,17 +385,18 @@ function findBestFallback(patientProfile: DiagnosticCase['patientProfile']): { i
     if (bestMatch) {
         return {
             idle: bestMatch.videos.idle,
-            talking: bestMatch.videos.talking
+            talking: bestMatch.videos.talking,
+            gender: bestMatch.gender
         };
     }
     
     // Absolute fallback
-    return { idle: null, talking: null };
+    return { idle: null, talking: null, gender: null };
 }
 
 export async function pickBestVideo(
     patientProfile: DiagnosticCase['patientProfile'],
-): Promise<{ idle: string | null; talking: string | null }> {
+): Promise<AvatarResult> {
     const aiInstance = getAi();
     
     // Create a list of descriptions for the prompt.
@@ -508,6 +443,7 @@ export async function pickBestVideo(
             return {
                 idle: selectedAvatar.videos.idle,
                 talking: selectedAvatar.videos.talking,
+                gender: selectedAvatar.gender
             };
         } else {
              console.warn(`AI selected an invalid avatar key: ${parsed.selected_key}. Falling back.`);

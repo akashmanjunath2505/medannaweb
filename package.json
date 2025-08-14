@@ -13,7 +13,8 @@
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "@vimeo/player": "^2.23.0",
-    "@supabase/supabase-js": "^2"
+    "@supabase/supabase-js": "^2",
+    "lucide-react": "^0.539.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

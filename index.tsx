@@ -4,8 +4,8 @@
 */
 import React, { useState, useEffect, useCallback, useRef, StrictMode, ReactNode, createContext, useContext, useMemo } from 'react';
 import { createRoot } from 'react-dom/client';
-import { generateCase, createChatForCase, DiagnosticCase, MCQ, generateSoapNoteForCase, generateHint, CaseTags, GenerationFilters, pickSpecialtyForCase, pickBestVideo, Chat, evaluateChatForEPAs, EPAScore } from './services/geminiService';
-import { supabase, signIn, signUp, signOut, getUserProfile, updateUserProfile, getCaseLogs, logCaseCompletion as supabaseLogCaseCompletion, getLeaderboard, getStreak, Profile, Streak, CaseLog, LeaderboardEntry, getUserScore, getNotifications, markNotificationAsRead as supabaseMarkNotificationAsRead, markAllNotificationsAsRead as supabaseMarkAllNotificationsAsRead, Notification, NotificationType, CaseResultDetails } from './services/supabaseService';
+import { generateCase, createChatForCase, DiagnosticCase, MCQ, generateSoapNoteForCase, generateHint, CaseTags, GenerationFilters, pickSpecialtyForCase, pickBestVideo, Chat } from './services/geminiService';
+import { supabase, signIn, signUp, signOut, getUserProfile, updateUserProfile, getNotifications, markNotificationAsRead as supabaseMarkNotificationAsRead, markAllNotificationsAsRead as supabaseMarkAllNotificationsAsRead, Notification, NotificationType, Profile } from './services/supabaseService';
 import { Session, User } from '@supabase/supabase-js';
 
 
@@ -17,7 +17,7 @@ type EPA = 'History-taking' | 'Physical Exam' | 'Diagnosis' | 'Management';
 type Page = 'home' | 'simulation';
 type Theme = 'light' | 'dark';
 type ActiveTab = 'chat' | 'diagnosis' | 'questions' | 'case';
-type HomeTab = 'home' | 'case' | 'progress' | 'leaderboard' | 'profile';
+type HomeTab = 'home' | 'case' | 'profile';
 
 
 export interface ChatMessage {
@@ -25,13 +25,6 @@ export interface ChatMessage {
     text: string;
     timestamp: string;
 }
-
-interface CaseResultPayload {
-    case_title: string;
-    case_details: CaseResultDetails;
-    score: number;
-}
-
 
 // --- CONSTANTS & SEED DATA ---
 const ALL_SPECIALTIES: Specialty[] = ['Internal Medicine', 'Pediatrics', 'Surgery', 'Obstetrics & Gynecology', 'Psychiatry', 'Cardiology', 'Neurology', 'Dermatology', 'Emergency Medicine'];
@@ -98,23 +91,16 @@ const MEDICAL_FUN_FACTS: Record<Specialty | 'General', string[]> = {
 
 // --- SVG ICONS ---
 const IconBook = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg>;
-const IconMicroscope = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 18h8"/><path d="m3 22 7-7"/><path d="M14 2 12 4 4 12l2 2 8-8 2-2Z"/><path d="M9 13.5 6 16.5"/><path d="m14 6-2-2"/><path d="M18 12.5 15.5 10"/><path d="m20 14-2.5-2.5"/><path d="m22 16-2.5-2.5"/></svg>;
 const IconStethoscope = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4a2 2 0 1 0 4 0a2 2 0 1 0-4 0"/><path d="M8 4h1a2 2 0 0 1 2 2v2a4 4 0 0 1-4 4H5a2 2 0 0 0-2 2v2a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2v-4a2 2 0 0 0-2-2h-1"/><path d="M17 4a2 2 0 1 0 4 0a2 2 0 1 0-4 0"/></svg>;
 const IconGraduationCap = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.42 10.922a1 1 0 0 0-.019-1.838L12.83 5.18a2 2 0 0 0-1.66 0L2.6 9.08a1 1 0 0 0 0 1.832l8.57 3.908a2 2 0 0 0 1.66 0z"/><path d="M22 10v6"/><path d="M6 12.5V16a6 6 0 0 0 12 0v-3.5"/></svg>;
 const IconBriefcase = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="14" x="2" y="7" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>;
-const IconPlus = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>;
 const IconMenu = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>;
-const IconMessage = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg>;
-const IconVolume = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/></svg>;
-const IconVolumeOff = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 5 6 9H2v6h4l5 5V5z"/><path d="m23 9-6 6M17 9l6 6"/></svg>;
 const IconClose = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>;
 const IconAlertTriangle = ({ className }: { className?: string }) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.46 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>;
 const IconCheck = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>;
 const IconX = ({className}: {className?: string}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>;
 const IconChevronDown = ({ className }: { className?: string }) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>;
-const IconChevronUp = ({ className }: { className?: string }) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>;
 const IconHome = ({className, isActive}: {className?: string, isActive?: boolean}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill={isActive ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>;
-const IconRefresh = () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></svg>;
 const IconSun = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>;
 const IconMoon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>;
 const IconSend = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>;
@@ -123,32 +109,20 @@ const IconLightbulb = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" h
 const IconUser = ({className, isActive}: {className?: string, isActive?: boolean}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill={isActive ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>;
 const IconDashboard = ({className, isActive}: {className?: string, isActive?: boolean}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill={isActive ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>;
 const IconLogOut = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>;
-const IconFlame = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5-2 4.5-2 4.5s-1.5-2-2.5-2c-1.5 0-2.5 2-2.5 2.5 0 2.5 2.5 2.5 2.5 2.5z"/><path d="M14.5 14.5c0-2.5-2.5-2.5-2.5-2.5s-2 0-2.5 2.5c.5.5 1.5 1.5 2.5 1.5s2-1 2.5-1.5z"/><path d="M12 18.5c-2.835 0-5.335-1.833-6-4.5 1.5 1 3 1.5 4.5 1.5s3-.5 4.5-1.5c-.667 2.667-3.165 4.5-6 4.5z"/></svg>;
-const IconCheckCircle = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>;
-const IconTrophy = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>;
 const IconFileText = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>;
 const IconBell = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>;
 const IconAward = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 17 17 23 15.79 13.88"/></svg>;
 const IconMail = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>;
 const IconChevronLeft = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>;
 const IconSettings = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 0 2l-.15.08a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l-.22-.38a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1 0 2l.15.08a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>;
-const IconMapPin = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>;
 const IconGift = () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>;
-const IconPlay = () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>;
 const IconArrowRight = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>;
-const IconTarget = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>;
-const IconCalendar = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>;
-const IconCrown = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4l3 12h14l3-12-6 7-4-7-4 7-6-7z"/></svg>;
-const IconTrendingUp = ({className, isActive}: {className?: string, isActive?: boolean}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill={isActive ? "currentColor" : "none"} stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>;
-const IconBarChart = ({className, isActive}: {className?: string, isActive?: boolean}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill={isActive ? "currentColor" : "none"} stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>;
 const IconHeart = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>;
 const IconBrain = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v1.23a.5.5 0 0 0 .3.46l4.43 2.22a2.5 2.5 0 0 1 1.47 3.32l-1.04 2.56a2.5 2.5 0 0 1-3.32 1.47l-4.43-2.22a.5.5 0 0 0-.3-.46V9.5A2.5 2.5 0 0 1 7 7 2.5 2.5 0 0 1 9.5 4.5 2.5 2.5 0 0 1 12 7v3.5"/><path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v1.23a.5.5 0 0 1-.3.46l-4.43 2.22a2.5 2.5 0 0 0-1.47 3.32l1.04 2.56a2.5 2.5 0 0 0 3.32 1.47l4.43-2.22a.5.5 0 0 1 .3-.46V9.5A2.5 2.5 0 0 0 17 7a2.5 2.5 0 0 0-2.5-2.5Z"/><path d="M6 16a1 1 0 0 1-1-1v-2.5a.5.5 0 0 1 .5-.5.5.5 0 0 0 .5-.5V10a1 1 0 0 1 1-1h1"/><path d="M18 16a1 1 0 0 0 1-1v-2.5a.5.5 0 0 0-.5-.5.5.5 0 0 1-.5-.5V10a1 1 0 0 0-1-1h-1"/></svg>;
 const IconScalpel = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.19 21.19 2.81 2.81"/><path d="M18.37 3.63 8 14l-4.37.75c-2.3.4-3.56 3.1-2.12 4.54l.15.15c1.44 1.44 4.14.18 4.54-2.12L7 16l10.37-10.37Z"/></svg>;
 const IconActivity = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>;
 const IconBaby = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12.5a5 5 0 0 0 5 5"/><path d="M9 8.5a5 5 0 0 1 5 5"/><path d="M11.5 2a.5.5 0 0 0-1 0V3a.5.5 0 0 0 1 0Z"/><path d="M18 12.5a5 5 0 0 0 5-5A5 5 0 0 0 14 6c-1.5 0-2.8 1-3.5 2.5"/><path d="M6 12.5a5 5 0 0 1-5-5A5 5 0 0 1 10 6c1.5 0 2.8 1 3.5 2.5"/><path d="M3 20.5a.5.5 0 0 0 1 0V19a.5.5 0 0 0-1 0Z"/><path d="M21 20.5a.5.5 0 0 1-1 0V19a.5.5 0 0 1 1 0Z"/><path d="M12 22a.5.5 0 0 0 0-1h-2a.5.5 0 0 0 0 1Z"/><circle cx="12" cy="12" r="10"/></svg>;
 const IconBottle = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 5h4"/><path d="M8 2h8"/><path d="M7 5v11a5 5 0 0 0 10 0V5"/><path d="M12 12H7"/><path d="M12 17h5"/></svg>;
-const IconFilter = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46V19l4 2v-8.54L22 3z"/></svg>;
-const IconUserPlus = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="17" y1="11" x2="23" y2="11"/></svg>;
 const IconSparkles = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.5 3L7 7.5l3 1.5L11.5 12l1.5-3L16 7.5l-3-1.5z"/><path d="M5 13l-1.5 3L0 17.5l3 1.5L4.5 22l1.5-3L9 17.5l-3-1.5z"/><path d="M19 13l-1.5 3L14 17.5l3 1.5L18.5 22l1.5-3L23 17.5l-3-1.5z"/></svg>;
 const IconHandPlaster = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 12a2 2 0 1 0 4 0 2 2 0 1 0-4 0"/><path d="M16 12a2 2 0 1 0 4 0 2 2 0 1 0-4 0"/><path d="M12 16a2 2 0 1 0 4 0 2 2 0 1 0-4 0"/><path d="M16 16a2 2 0 1 0 4 0 2 2 0 1 0-4 0"/><path d="M18 8a2 2 0 1 0-4 0v1a2 2 0 1 0 4 0V8Z"/><path d="M18 5a1 1 0 0 0-1-1h-2a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1V5Z"/><path d="M18.8 3.2a1 1 0 0 0-1.6 1.2 5 5 0 0 1-1.2 3.6 5 5 0 0 0-3.6 1.2 1 1 0 0 0 1.2 1.6 7 7 0 0 0 5.2-1.7 7 7 0 0 1 1.7-5.2 1 1 0 0 0-1.7-1.2Z"/><path d="M7 19.5c.2.2.5.2.7 0l2.9-2.9c.2-.2.2-.5 0-.7l-1.2-1.2c-.2-.2-.5-.2-.7 0l-2.9 2.9c-.2.2-.2.5 0 .7l1.2 1.2Z"/><path d="M4.6 20a2.5 2.5 0 0 1-3.4-3.4l.6-.6a2.5 2.5 0 0 1 3.4 3.4l-.6.6Z"/><path d="M11 11.5c.2.2.5.2.7 0l2.9-2.9c.2-.2.2-.5 0-.7l-1.2-1.2c-.2-.2-.5-.2-.7 0L10 9.6c-.2.2-.2.5 0 .7l1.2 1.2Z"/></svg>;
 const IconSearch = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>;
@@ -162,14 +136,9 @@ interface AppContextType {
     profile: Profile | null;
     isAuthLoading: boolean;
     authError: string | null;
-    streak: Streak | null;
-    score: number | null;
-    caseLogs: CaseLog[];
-    leaderboard: LeaderboardEntry[];
     setProfile: (profile: Profile | null) => void;
     handleSignOut: () => void;
     updateUserTrainingPhase: (trainingPhase: TrainingPhase) => Promise<void>;
-    logCompletedCase: (caseResult: CaseResultPayload) => Promise<void>;
 
     // App State
     page: Page;
@@ -203,7 +172,7 @@ interface AppContextType {
     updateHintCount: (newCount: number) => void;
 
     // Patient Video (now stores video IDs)
-    patientVideos: { idle: string | null; talking: string | null };
+    patientVideos: { idle: string | null; talking: string | null; gender: 'Male' | 'Female' | null; };
 
     // Notifications
     notifications: Notification[];
@@ -244,28 +213,12 @@ const getInitials = (name: string | null | undefined) => {
     return name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase();
 }
 
-const inferSpecialtyFromTitle = (title: string): Specialty => {
-    const lowerTitle = title.toLowerCase();
-    if (lowerTitle.includes('chest pain') || lowerTitle.includes('dyspnea') || lowerTitle.includes('palpitations')) return 'Cardiology';
-    if (lowerTitle.includes('weakness') || lowerTitle.includes('headache') || lowerTitle.includes('seizure')) return 'Neurology';
-    if (lowerTitle.includes('abdominal pain') || lowerTitle.includes('female')) return 'Obstetrics & Gynecology';
-    if (lowerTitle.includes('skin') || lowerTitle.includes('rash')) return 'Dermatology';
-    if (lowerTitle.includes('child') || lowerTitle.includes('infant') || lowerTitle.includes('boy') || lowerTitle.includes('girl')) return 'Pediatrics';
-    if (lowerTitle.includes('elderly') || lowerTitle.includes('polyuria') || lowerTitle.includes('fatigue')) return 'Internal Medicine';
-    return 'Internal Medicine'; // Default fallback
-};
-
-
 const AppContextProvider = ({ children }: { children: ReactNode }) => {
     // Auth & Profile State
     const [session, setSession] = useState<Session | null>(null);
     const [profile, setProfile] = useState<Profile | null>(null);
     const [isAuthLoading, setIsAuthLoading] = useState(true);
     const [authError, setAuthError] = useState<string | null>(null);
-    const [streak, setStreak] = useState<Streak | null>(null);
-    const [score, setScore] = useState<number | null>(null);
-    const [caseLogs, setCaseLogs] = useState<CaseLog[]>([]);
-    const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
 
     // App State
     const [page, setPage] = useState<Page>('home');
@@ -289,7 +242,7 @@ const AppContextProvider = ({ children }: { children: ReactNode }) => {
     const [hintCount, setHintCount] = useState(MAX_HINTS);
 
     // Video State
-    const [patientVideos, setPatientVideos] = useState<{ idle: string | null; talking: string | null }>({ idle: null, talking: null });
+    const [patientVideos, setPatientVideos] = useState<{ idle: string | null; talking: string | null; gender: 'Male' | 'Female' | null }>({ idle: null, talking: null, gender: null });
 
 
     // Notification State
@@ -315,12 +268,8 @@ const AppContextProvider = ({ children }: { children: ReactNode }) => {
     const fetchAllUserData = async (user: User) => {
         try {
             const userId = user.id;
-            const [profileData, streakData, logsData, leaderboardData, scoreData, notificationsData] = await Promise.all([
+            const [profileData, notificationsData] = await Promise.all([
                 getUserProfile(userId),
-                getStreak(userId),
-                getCaseLogs(userId),
-                getLeaderboard(),
-                getUserScore(userId),
                 getNotifications(userId),
             ]);
 
@@ -334,10 +283,6 @@ const AppContextProvider = ({ children }: { children: ReactNode }) => {
                 setProfile(null);
             }
             
-            setStreak(streakData);
-            setCaseLogs(logsData.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()));
-            setLeaderboard(leaderboardData);
-            setScore(scoreData);
             setNotifications(notificationsData);
             setUnreadCount(notificationsData.filter(n => !n.is_read).length);
         } catch (error) {
@@ -378,10 +323,6 @@ const AppContextProvider = ({ children }: { children: ReactNode }) => {
             } else {
                 // If there's no session, clear all user-related data.
                 setProfile(null);
-                setStreak(null);
-                setScore(null);
-                setCaseLogs([]);
-                setLeaderboard([]);
                 setNotifications([]);
                 setUnreadCount(0);
             }
@@ -430,17 +371,6 @@ const AppContextProvider = ({ children }: { children: ReactNode }) => {
         }
     };
 
-    const logCompletedCase = async (caseResult: CaseResultPayload) => {
-        if (!session?.user) return;
-        try {
-            await supabaseLogCaseCompletion(session.user.id, caseResult);
-            // Refetch data to update UI
-            await fetchAllUserData(session.user);
-        } catch (error) {
-            console.error("Failed to log case", error);
-        }
-    };
-
     const markNotificationAsRead = async (notificationId: number) => {
         if (!session?.user) return;
         // Optimistically update UI
@@ -475,17 +405,17 @@ const AppContextProvider = ({ children }: { children: ReactNode }) => {
     const loadPatientVideos = async (profile: DiagnosticCase['patientProfile']) => {
         try {
             // Use LLM to pick the best avatar. This returns a pair of guaranteed-to-match video IDs.
-            const videoIds = await pickBestVideo(profile);
+            const videoData = await pickBestVideo(profile);
             
-            if (!videoIds.idle || !videoIds.talking) {
-                console.warn("Video selection returned null IDs. Falling back to icon.", videoIds);
-                setPatientVideos({ idle: null, talking: null });
+            if (!videoData.idle || !videoData.talking) {
+                console.warn("Video selection returned null IDs. Falling back to icon.", videoData);
+                setPatientVideos({ idle: null, talking: null, gender: null });
             } else {
-                 setPatientVideos({ idle: videoIds.idle, talking: videoIds.talking });
+                 setPatientVideos(videoData);
             }
         } catch (error) {
             console.error("Error during video selection process, will fallback to icon.", error);
-            setPatientVideos({ idle: null, talking: null });
+            setPatientVideos({ idle: null, talking: null, gender: null });
         }
     };
 
@@ -558,7 +488,7 @@ const AppContextProvider = ({ children }: { children: ReactNode }) => {
     };
 
     const value = {
-        session, profile, isAuthLoading, authError, streak, score, caseLogs, leaderboard, setProfile, handleSignOut, updateUserTrainingPhase, logCompletedCase,
+        session, profile, isAuthLoading, authError, setProfile, handleSignOut, updateUserTrainingPhase,
         page, setPage, homeTab, setHomeTab, theme, toggleTheme, isMobile, isMobileMenuOpen, setIsMobileMenuOpen,
         isGenerating, generationError, generationFilters, currentCase, handleStartNewCase, handleGenerateAndStart, handleRegenerateCase,
         soapNote, isGeneratingSoapNote, soapNoteError, handleGenerateSoapNote,
@@ -575,7 +505,6 @@ const AppContextProvider = ({ children }: { children: ReactNode }) => {
 const NotificationIcon = ({ type }: { type: NotificationType }) => {
     switch (type) {
         case 'achievement': return <IconAward />;
-        case 'leaderboard': return <IconTrophy />;
         case 'new_feature': return <IconLightbulb />;
         default: return <IconMail />;
     }
@@ -699,11 +628,6 @@ const MobileProfileMenu = ({ onClose }: { onClose: () => void }) => {
 
     if (!profile) return null;
 
-    const handleNavigation = (tab: HomeTab) => {
-        setHomeTab(tab);
-        onClose();
-    };
-
     return (
         <div className="mobile-menu-overlay" onClick={onClose}>
             <div className="mobile-menu-content" onClick={(e) => e.stopPropagation()}>
@@ -713,16 +637,6 @@ const MobileProfileMenu = ({ onClose }: { onClose: () => void }) => {
                     <button className="close-button" onClick={onClose} aria-label="Close menu"><IconClose /></button>
                 </div>
                 <div className="mobile-menu-body">
-                    <div className="mobile-menu-section">
-                         <button className="mobile-menu-item" onClick={() => handleNavigation('progress')}>
-                            <IconTrendingUp className='' />
-                            <span>My Progress</span>
-                        </button>
-                        <button className="mobile-menu-item" onClick={() => handleNavigation('leaderboard')}>
-                            <IconBarChart className='' />
-                            <span>Leaderboard</span>
-                        </button>
-                    </div>
                      <div className="mobile-menu-section">
                         <button className="mobile-menu-item" onClick={() => { toggleTheme(); onClose(); }}>
                             {theme === 'light' ? <IconMoon /> : <IconSun />}
@@ -742,7 +656,7 @@ const MobileProfileMenu = ({ onClose }: { onClose: () => void }) => {
 const AppHeader = () => {
     const { session, setPage, isMobile, page, homeTab, setIsMobileMenuOpen, profile } = useAppContext();
     
-    if (isMobile && page === 'home' && (homeTab === 'leaderboard' || homeTab === 'case')) {
+    if (isMobile && page === 'home' && (homeTab === 'case')) {
         return null;
     }
 
@@ -762,8 +676,7 @@ const AppHeader = () => {
             );
         }
         
-        let title = "Progress";
-        if (homeTab === 'profile') title = "Profile"; // Fallback, though menu opens
+        let title = "Profile"; // Fallback, though menu opens
         
         return (
             <header className="app-header mobile-generic-header">
@@ -1120,19 +1033,36 @@ const NewCaseTab = () => {
     };
 
     if (isMobile) {
+        const handleNextStep = () => {
+            if (simSetupTab === 'Phase') {
+                if (profile?.training_phase) {
+                    setSimSetupTab('Specialty');
+                }
+            } else if (simSetupTab === 'Specialty') {
+                setSimSetupTab('EPA');
+            } else if (simSetupTab === 'EPA') {
+                handleGenerateClick();
+            }
+        };
+
+        const handleBackStep = () => {
+            if (simSetupTab === 'EPA') {
+                setSimSetupTab('Specialty');
+            } else if (simSetupTab === 'Specialty') {
+                setSimSetupTab('Phase');
+            } else { // 'Phase'
+                setHomeTab('home');
+            }
+        };
+
         return (
             <div className="new-case-tab-mobile">
                  <header className="app-header mobile-generic-header standalone">
-                    <button className="icon-button" onClick={() => setHomeTab('home')}><IconChevronLeft /></button>
+                    <button className="icon-button" onClick={handleBackStep}><IconChevronLeft /></button>
                     <h1 className="app-header-title">Simulation</h1>
                     <div style={{width: 40}}></div>
                 </header>
-                <div className="mobile-sim-tabs">
-                    <button className={simSetupTab === 'Phase' ? 'active' : ''} onClick={() => setSimSetupTab('Phase')}>Phase</button>
-                    <button className={simSetupTab === 'Specialty' ? 'active' : ''} onClick={() => setSimSetupTab('Specialty')}>Specialty</button>
-                    <button className={simSetupTab === 'EPA' ? 'active' : ''} onClick={() => setSimSetupTab('EPA')}>EPA</button>
-                </div>
-
+                
                 <div className="mobile-tab-content">
                     {simSetupTab === 'Phase' && (
                          <div className="training-phase-section mobile">
@@ -1169,17 +1099,17 @@ const NewCaseTab = () => {
                 <div className="mobile-start-button-container">
                     <button
                         className="button button-primary generate-button"
-                        onClick={handleGenerateClick}
+                        onClick={handleNextStep}
                         disabled={isGenerating || !profile?.training_phase}
                         title={!profile?.training_phase ? "Please select a training phase first" : "Start a new case"}
                     >
-                        {isGenerating ? <div className="loading-spinner"></div> : (simSetupTab === 'EPA' ? "Talk to Patient" : "Next")}
+                        {isGenerating ? <div className="loading-spinner"></div> : (simSetupTab === 'EPA' ? "Generate Case" : "Next")}
                     </button>
-                     {!profile?.training_phase && <p className="alert alert-inline">Please select a training phase to start.</p>}
+                     {!profile?.training_phase && simSetupTab === 'Phase' && <p className="alert alert-inline">Please select a training phase to start.</p>}
                     {generationError && <p className="alert alert-error">{generationError}</p>}
                 </div>
             </div>
-        )
+        );
     }
 
     return (
@@ -1214,76 +1144,12 @@ const NewCaseTab = () => {
     );
 };
 
-const DashboardMetrics = () => {
-    const { streak, caseLogs, score } = useAppContext();
-    return (
-        <div className="dashboard-metrics">
-            <div className="metric-card">
-                <div className="metric-icon streak"><IconFlame /></div>
-                <div className="metric-info">
-                    <h3>{streak?.current_streak ?? 0} Day{streak?.current_streak !== 1 && 's'}</h3>
-                    <p>Current Streak</p>
-                </div>
-            </div>
-             <div className="metric-card">
-                <div className="metric-icon completed"><IconCheckCircle /></div>
-                <div className="metric-info">
-                    <h3>{caseLogs?.length ?? 0}</h3>
-                    <p>Cases Completed</p>
-                </div>
-            </div>
-             <div className="metric-card">
-                <div className="metric-icon score"><IconTrophy /></div>
-                <div className="metric-info">
-                    <h3>{score !== null ? score.toFixed(1) : '0.0'}</h3>
-                    <p>Average Score</p>
-                </div>
-            </div>
-        </div>
-    );
-}
-
-const LeaderboardHighlight = () => {
-    const { leaderboard, profile } = useAppContext();
-    const topThree = leaderboard.slice(0, 3);
-
-    return (
-        <div className="leaderboard-highlight">
-            {topThree.map((entry, index) => (
-                <div key={entry.user_id} className={`leaderboard-highlight-item rank-${index + 1}`}>
-                    <div className="highlight-rank">#{index + 1}</div>
-                    <div className="highlight-info">
-                        <div className="highlight-name">{entry.profiles?.full_name}{profile?.id === entry.user_id ? ' (You)' : ''}</div>
-                        <div className="highlight-score">{entry.score.toFixed(1)} pts</div>
-                    </div>
-                </div>
-            ))}
-        </div>
-    );
-}
-
-const HomePageSidebar = () => {
-    const { leaderboard } = useAppContext();
-    return (
-        <aside className="home-page-sidebar">
-            <h3>Leaderboard</h3>
-            {leaderboard.length > 0 ? (
-                <LeaderboardHighlight />
-            ) : (
-                <p>No rankings yet. Complete a case to get on the board!</p>
-            )}
-        </aside>
-    )
-}
-
 const BottomNavBar = () => {
     const { homeTab, setHomeTab, setIsMobileMenuOpen } = useAppContext();
 
     const TABS: { id: HomeTab; icon: React.FC<{className?: string, isActive?: boolean}>; label: string }[] = [
         { id: 'home', icon: IconHome, label: 'Home' },
         { id: 'case', icon: IconDashboard, label: 'Case' },
-        { id: 'progress', icon: IconTrendingUp, label: 'Progress' },
-        { id: 'leaderboard', icon: IconBarChart, label: 'Leaderboard' },
         { id: 'profile', icon: IconUser, label: 'Profile' },
     ];
     
@@ -1329,39 +1195,6 @@ const PromoBanner = () => (
     </div>
 );
 
-const ResumeCaseCard = () => {
-    const { handleGenerateAndStart, profile, isGenerating, caseLogs } = useAppContext();
-    const [isLoading, setIsLoading] = useState(false);
-    const lastCase = caseLogs && caseLogs.length > 0 ? caseLogs[0] : null;
-
-    if (!lastCase) return null;
-
-    const handlePracticeAgain = () => {
-        if (profile?.training_phase && !isGenerating && !isLoading) {
-            setIsLoading(true);
-            const specialty = inferSpecialtyFromTitle(lastCase.case_title);
-            handleGenerateAndStart({
-                trainingPhase: profile.training_phase,
-                specialties: [specialty],
-            }).finally(() => setIsLoading(false));
-        }
-    };
-    
-    return (
-        <div className="resume-case-card">
-            <h3>Chest Pain Evaluation</h3>
-            <div className="details-line">
-                <span className="specialty-tag">CARDIOLOGY</span>
-                <span className="time-ago">2 hours ago</span>
-            </div>
-            <button className="resume-button" onClick={handlePracticeAgain} disabled={isGenerating || isLoading}>
-                {(isGenerating || isLoading) ? <div className="loading-spinner"></div> : <IconPlay />}
-                <span>Resume Case</span>
-            </button>
-        </div>
-    );
-};
-
 const StartSimCard = ({ onStart }: { onStart: () => void }) => (
     <div className="start-sim-card">
         <h2>Talk to your Virtual Patient</h2>
@@ -1372,499 +1205,11 @@ const StartSimCard = ({ onStart }: { onStart: () => void }) => (
     </div>
 );
 
-const QuickActions = () => {
-    const { caseLogs, streak } = useAppContext();
-
-    const accuracy = useMemo(() => {
-        if (!caseLogs || caseLogs.length === 0) return 91.2; // Placeholder
-        const correctCount = caseLogs.filter(log => (log.case_details as unknown as CaseResultDetails | null)?.diagnosisCorrect).length;
-        return (correctCount / caseLogs.length) * 100;
-    }, [caseLogs]);
-
-    const casesToday = useMemo(() => {
-        if(!caseLogs) return 3; // Placeholder
-        const todayStr = new Date().toISOString().split('T')[0];
-        return caseLogs.filter(log => log.created_at.startsWith(todayStr)).length;
-    }, [caseLogs]);
-
-    return (
-        <section className="quick-actions-section">
-            <h3>Quick actions</h3>
-            <div className="quick-actions-grid">
-                <div className="metric-card-v2">
-                    <div className="metric-card-v2-icon"><IconTarget /></div>
-                    <p>Accuracy</p>
-                    <span>{accuracy.toFixed(1)} %</span>
-                </div>
-                <div className="metric-card-v2">
-                    <div className="metric-card-v2-icon"><IconCalendar /></div>
-                    <p>Today</p>
-                    <span>{casesToday} Case{casesToday !== 1 && 's'}</span>
-                </div>
-                <div className="metric-card-v2">
-                    <div className="metric-card-v2-icon"><IconFlame /></div>
-                    <p>Streak</p>
-                    <span>{streak?.current_streak ?? 23} day{streak?.current_streak !== 1 && 's'}</span>
-                </div>
-            </div>
-        </section>
-    );
-};
-
-const TopPerformances = () => {
-    const { leaderboard, profile } = useAppContext();
-    const topThree = leaderboard.slice(0, 3);
-    const currentUserRank = leaderboard.findIndex(e => e.user_id === profile?.id);
-
-    return (
-        <section className="top-performances-section">
-            <div className="top-performances-header">
-                <IconCrown />
-                <h3>Top Performances</h3>
-            </div>
-            <div className="top-performances-list">
-                {topThree.map((entry, index) => (
-                    <div key={entry.user_id} className="performance-item">
-                        <span className="performance-rank">{index + 1}.</span>
-                        <div className="performance-avatar">
-                             {getInitials(entry.profiles?.full_name)}
-                        </div>
-                        <span className="performance-name">{entry.profiles?.full_name}</span>
-                        <span className="performance-score">{entry.score.toFixed(1)}</span>
-                    </div>
-                ))}
-            </div>
-            {currentUserRank !== -1 && (
-                <p className="current-user-rank">You have ranked #{currentUserRank + 1} this week</p>
-            )}
-        </section>
-    );
-};
-
 const AivanaFooter = () => (
     <div className="aivana-footer">
         from <strong>Aivana</strong>
     </div>
 );
-
-
-const MyCasesTab = () => {
-    const { caseLogs, handleGenerateAndStart, profile, isGenerating } = useAppContext();
-    const [isLoading, setIsLoading] = useState<Record<string, boolean>>({});
-
-    const getSpecialtyIcon = (specialty: Specialty) => {
-        const icons: Record<Specialty, React.FC> = {
-            'Cardiology': IconHeart,
-            'Neurology': IconSparkles,
-            'Surgery': IconScalpel,
-            'Pediatrics': IconBottle,
-            'Obstetrics & Gynecology': IconBaby,
-            'Psychiatry': IconBrain,
-            'Dermatology': IconHandPlaster,
-            'Emergency Medicine': IconActivity,
-            'Internal Medicine': IconStethoscope
-        };
-        return icons[specialty] || IconStethoscope;
-    };
-    
-    if (caseLogs.length === 0) {
-        return <div className="empty-state">You haven't completed any cases yet. Go to the "Case" tab to start one!</div>;
-    }
-
-    const handlePracticeAgain = (log: CaseLog) => {
-        if (profile?.training_phase && !isGenerating && !isLoading[log.id]) {
-            setIsLoading(prev => ({ ...prev, [log.id]: true }));
-            const specialty = inferSpecialtyFromTitle(log.case_title);
-            handleGenerateAndStart({
-                trainingPhase: profile.training_phase,
-                specialties: [specialty],
-            }).finally(() => setIsLoading(prev => ({ ...prev, [log.id]: false })));
-        }
-    };
-    
-    const getScoreColorClass = (score: number) => {
-        if (score >= 90) return 'rating-good';
-        if (score >= 75) return 'rating-medium';
-        return 'rating-bad';
-    };
-
-    const recentActivityCase = caseLogs[0];
-    const caseHistory = caseLogs.slice(1);
-
-    return (
-        <div className="my-cases-view">
-             <div className="recent-activity-card">
-                <div className="recent-activity-header">
-                    <h4>Recent activity</h4>
-                </div>
-                <h3>CHEST PAIN EVALUATION</h3>
-                <div className="recent-activity-footer">
-                    <span>Cardiology</span>
-                    <span>2 hours ago</span>
-                </div>
-                 <button onClick={() => handlePracticeAgain(recentActivityCase)} className="recent-activity-resume-button" disabled={isGenerating || isLoading[recentActivityCase.id]}>
-                    {(isGenerating || isLoading[recentActivityCase.id]) ? <div className="loading-spinner"></div> : "Resume Case"}
-                </button>
-            </div>
-
-            {caseHistory.length > 0 && <h3 className="view-section-title">Case History</h3>}
-            <div className="case-history-list">
-                {caseHistory.map(log => {
-                    const details = log.case_details as unknown as CaseResultDetails | null;
-                    if (!details) return null;
-                    const specialty = inferSpecialtyFromTitle(log.case_title);
-                    const Icon = getSpecialtyIcon(specialty);
-                    const scorePercent = Math.round(log.score * 10);
-                    const trainingPhaseTag = details.tags 
-                        ? details.tags.trainingPhase 
-                        : (details.diagnosisCorrect ? 'Clinical' : 'Para-clinical');
-
-                    return (
-                        <div key={log.id} className="case-history-item">
-                            <div className="case-history-icon-wrapper"><Icon /></div>
-                            <div className="case-history-details">
-                                <h4>{log.case_title}</h4>
-                                <div className="case-history-tags">
-                                    <span className="tag-specialty">{specialty}</span>
-                                    <span className="tag-phase">{trainingPhaseTag}</span>
-                                </div>
-                            </div>
-                            <div className="case-history-meta">
-                                <span className={`case-history-score score-${getScoreColorClass(scorePercent)}`}>
-                                    <IconCheckCircle /> {scorePercent}%
-                                </span>
-                                <span className="case-history-time">{timeAgo(log.created_at)}</span>
-                            </div>
-                        </div>
-                    )
-                })}
-            </div>
-        </div>
-    );
-};
-
-const RadarChart = ({ data }: { data: { label: string, value: number }[] }) => {
-    const size = 200;
-    const center = size / 2;
-    const radius = size * 0.4;
-    const angleSlice = (Math.PI * 2) / data.length;
-
-    const points = data.map((d, i) => {
-        const angle = angleSlice * i - Math.PI / 2;
-        const x = center + radius * (d.value / 100) * Math.cos(angle);
-        const y = center + radius * (d.value / 100) * Math.sin(angle);
-        return `${x},${y}`;
-    }).join(' ');
-
-    const axisPoints = Array.from({ length: data.length }, (_, i) => {
-        const angle = angleSlice * i - Math.PI / 2;
-        const labelAngle = (angleSlice * i * 180 / Math.PI) - 90;
-        const x = center + radius * Math.cos(angle);
-        const y = center + radius * Math.sin(angle);
-        const labelX = center + (radius + 20) * Math.cos(angle);
-        const labelY = center + (radius + 20) * Math.sin(angle);
-
-        return { x, y, labelX, labelY, label: data[i].label, value: data[i].value };
-    });
-
-    return (
-        <svg className="radar-chart-svg" viewBox={`0 0 ${size} ${size}`}>
-             {/* Web Rings */}
-            {Array.from({ length: 4 }).map((_, i) => (
-                <circle
-                    key={i}
-                    cx={center}
-                    cy={center}
-                    r={radius * ((i + 1) / 4)}
-                    fill="none"
-                    stroke="var(--color-border)"
-                    strokeWidth="0.5"
-                />
-            ))}
-            {/* Axes and Labels */}
-            {axisPoints.map((p, i) => (
-                <g key={i}>
-                    <text x={p.labelX} y={p.labelY} dy="0.3em" textAnchor="middle" className="radar-label-text">
-                        {p.label.toUpperCase()} <tspan className="radar-label-value">{p.value.toFixed(0)}%</tspan>
-                    </text>
-                </g>
-            ))}
-            {/* Data Polygon */}
-            <polygon points={points} fill="rgba(79, 70, 229, 0.4)" stroke="var(--color-brand)" strokeWidth="1.5" />
-        </svg>
-    );
-};
-
-const DonutChart = ({ percentage, color, label }: { percentage: number, color: string, label: string }) => {
-    const size = 100;
-    const strokeWidth = 10;
-    const radius = (size - strokeWidth) / 2;
-    const circumference = 2 * Math.PI * radius;
-    const offset = circumference - (percentage / 100) * circumference;
-
-    return (
-        <div className="donut-chart-container">
-            <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-                <circle
-                    className="donut-background"
-                    cx={size / 2} cy={size / 2} r={radius}
-                    strokeWidth={strokeWidth}
-                />
-                <circle
-                    className="donut-foreground"
-                    cx={size / 2} cy={size / 2} r={radius}
-                    strokeWidth={strokeWidth}
-                    stroke={color}
-                    strokeDasharray={circumference}
-                    strokeDashoffset={offset}
-                />
-                <text x="50%" y="50%" textAnchor="middle" dy="0.3em" className="donut-percentage">
-                    {percentage.toFixed(0)}%
-                </text>
-            </svg>
-            <span className="donut-label">{label}</span>
-        </div>
-    );
-};
-
-const PerformanceTab = () => {
-    const { caseLogs, streak } = useAppContext();
-    
-    const performanceData = useMemo(() => {
-        if (!caseLogs) {
-             return {
-                casesToday: 7, casesThisWeek: 23, casesOverall: 2002,
-                accuracyToday: 78, accuracyThisWeek: 81, accuracyOverall: 73,
-                specialtyStats: [], radarData: []
-            };
-        }
-        
-        const today = new Date();
-        const oneWeekAgo = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 7);
-
-        const logsToday = caseLogs.filter(log => new Date(log.created_at).toDateString() === today.toDateString());
-        const logsThisWeek = caseLogs.filter(log => new Date(log.created_at) >= oneWeekAgo);
-
-        const calcAccuracy = (logs: CaseLog[]) => {
-            if (logs.length === 0) return 0;
-            const correct = logs.filter(l => (l.case_details as unknown as CaseResultDetails | null)?.diagnosisCorrect).length;
-            return (correct / logs.length) * 100;
-        };
-        
-        const overallAccuracy = calcAccuracy(caseLogs);
-        
-        const epaHistoryTaking = caseLogs.length > 0
-            ? caseLogs.reduce((acc, log) => acc + ((log.case_details as unknown as CaseResultDetails | null)?.epaScores?.history || 0), 0) / caseLogs.length
-            : 70;
-
-        const epaPhysicalExam = caseLogs.length > 0
-            ? caseLogs.reduce((acc, log) => acc + ((log.case_details as unknown as CaseResultDetails | null)?.epaScores?.physicalExam || 0), 0) / caseLogs.length
-            : 43;
-            
-        const diagnosisAccuracy = overallAccuracy > 0 ? overallAccuracy : 79;
-        
-        const managementAccuracy = caseLogs.length > 0 ? 81 : 81; // Placeholder for now
-
-
-        const specialtyStats = ALL_SPECIALTIES.map(specialty => {
-            const specialtyLogs = caseLogs.filter(log => inferSpecialtyFromTitle(log.case_title) === specialty);
-            if (specialtyLogs.length === 0) return { name: specialty, score: 0, cases: 0 };
-            const totalScore = specialtyLogs.reduce((acc, log) => acc + log.score, 0);
-            return { name: specialty, score: (totalScore / specialtyLogs.length) * 10, cases: specialtyLogs.length };
-        });
-
-        return {
-            casesToday: logsToday.length || 7,
-            casesThisWeek: logsThisWeek.length || 23,
-            casesOverall: caseLogs.length || 2002,
-            accuracyToday: calcAccuracy(logsToday) || 78,
-            accuracyThisWeek: calcAccuracy(logsThisWeek) || 81,
-            accuracyOverall: overallAccuracy || 73,
-            specialtyStats,
-            radarData: [
-                { label: 'Management', value: managementAccuracy },
-                { label: 'Diagnosis', value: diagnosisAccuracy },
-                { label: 'Physical Exam', value: epaPhysicalExam },
-                { label: 'History Taking', value: epaHistoryTaking },
-            ]
-        };
-    }, [caseLogs]);
-
-    const getProgressBarColorClass = (score: number) => {
-        if (score >= 80) return 'rating-good';
-        if (score >= 50) return 'rating-medium';
-        return 'rating-bad';
-    };
-
-    return (
-        <div className="performance-view">
-            <div className="your-progress-card">
-                <div className="your-progress-header">
-                    <h3>YOUR PROGRESS</h3>
-                    <p>Track your medical simulation journey</p>
-                </div>
-                <div className="your-progress-content">
-                    <RadarChart data={performanceData.radarData} />
-                </div>
-            </div>
-
-            <div className="performance-section">
-                <h3>CASES COMPLETED</h3>
-                <div className="cases-completed-grid">
-                    <div className="stat-box"><span>{performanceData.casesToday}</span><p>Today</p></div>
-                    <div className="stat-box"><span>{performanceData.casesThisWeek}</span><p>This Week</p></div>
-                    <div className="stat-box"><span>{performanceData.casesOverall}</span><p>Overall</p></div>
-                </div>
-            </div>
-            
-             <div className="performance-section">
-                <h3>STREAK</h3>
-                <div className="streak-card-performance">
-                    <span>{streak?.current_streak ?? 23}</span>
-                    <p>Awesome! You have completed atleast 1 case for {streak?.current_streak ?? 23} days.</p>
-                </div>
-            </div>
-            
-             <div className="performance-section">
-                <h3>ACCURACY</h3>
-                <div className="accuracy-donuts-container">
-                    <DonutChart percentage={performanceData.accuracyToday} color="var(--color-success)" label="Today"/>
-                    <DonutChart percentage={performanceData.accuracyThisWeek} color="var(--color-brand)" label="This Week"/>
-                    <DonutChart percentage={performanceData.accuracyOverall} color="#AF52DE" label="Overall"/>
-                </div>
-            </div>
-
-             <div className="performance-section">
-                <h3>SPECIALTY EXPERIENCE</h3>
-                <div className="specialty-experience-list">
-                    {performanceData.specialtyStats.map(stat => (
-                         <div key={stat.name} className="specialty-progress-item">
-                             <div className="specialty-progress-info">
-                                <span>{stat.name}</span>
-                                <span>{stat.score.toFixed(1)}/100 Score</span>
-                             </div>
-                             <div className="progress-bar-container">
-                                 <div className={`progress-bar-fill progress-bar-${getProgressBarColorClass(stat.score)}`} style={{ width: `${stat.score}%` }}></div>
-                             </div>
-                         </div>
-                    ))}
-                </div>
-            </div>
-
-        </div>
-    );
-};
-
-
-const ProgressPage = () => {
-    const [activeProgressTab, setActiveProgressTab] = useState<'cases' | 'performance'>('performance');
-
-    return (
-        <div className="progress-page">
-            <div className="progress-tabs">
-                <button className={activeProgressTab === 'cases' ? 'active' : ''} onClick={() => setActiveProgressTab('cases')}>My Cases</button>
-                <button className={activeProgressTab === 'performance' ? 'active' : ''} onClick={() => setActiveProgressTab('performance')}>Performance</button>
-            </div>
-            <div className="progress-content">
-                {activeProgressTab === 'cases' ? <MyCasesTab /> : <PerformanceTab />}
-            </div>
-        </div>
-    );
-};
-
-const LeaderboardPodium = ({ topThree }: { topThree: LeaderboardEntry[] }) => {
-    const sortedTopThree = [...topThree];
-    // Ensure correct order for podium display: 2nd, 1st, 3rd
-    if (sortedTopThree.length === 3) {
-      [sortedTopThree[0], sortedTopThree[1]] = [sortedTopThree[1], sortedTopThree[0]]; // Swap 1st and 2nd
-    }
-    
-    return (
-      <div className="leaderboard-podium">
-        {sortedTopThree.map((entry, index) => {
-          // Adjust rank based on sorted position
-          let rank = index + 1;
-          if (sortedTopThree.length === 3) {
-            if (index === 0) rank = 2;
-            if (index === 1) rank = 1;
-            if (index === 2) rank = 3;
-          }
-  
-          return (
-            <div key={entry.user_id} className={`podium-item podium-item-${rank}`}>
-              <div className="podium-avatar">
-                {getInitials(entry.profiles?.full_name)}
-                <div className="podium-rank">{rank}</div>
-              </div>
-              <span className="podium-name">{entry.profiles?.full_name || 'Anonymous'}</span>
-              <div className="podium-stats">
-                  <span><IconTarget/> {entry.accuracy}%</span>
-                  <span><IconFlame/> {entry.streak}</span>
-              </div>
-              <div className="podium-score">{entry.score.toFixed(2)}</div>
-            </div>
-          );
-        })}
-      </div>
-    );
-  };
-  
-  const LeaderboardList = ({ list }: { list: LeaderboardEntry[] }) => {
-    return (
-      <div className="leaderboard-list">
-        <div className="leaderboard-list-header">
-          <span>Name</span>
-          <span>Accuracy</span>
-          <span>Streak</span>
-          <span>Medscore</span>
-        </div>
-        {list.map((entry, index) => (
-          <div key={entry.user_id} className="leaderboard-list-item">
-            <div className="leaderboard-list-name">
-              <span className="leaderboard-list-rank">{index + 4}.</span>
-              <div className="leaderboard-list-avatar">{getInitials(entry.profiles?.full_name)}</div>
-              <span>{entry.profiles?.full_name || 'Anonymous'}</span>
-            </div>
-            <span>{entry.accuracy}%</span>
-            <span><IconFlame /> {entry.streak}</span>
-            <span className="leaderboard-list-medscore">{entry.score.toFixed(2)}</span>
-          </div>
-        ))}
-      </div>
-    );
-  };
-  
-  const LeaderboardPage = () => {
-    const { leaderboard } = useAppContext();
-    const [activeFilter, setActiveFilter] = useState<'global' | 'friends'>('global');
-  
-    const topThree = leaderboard.slice(0, 3);
-    const restOfList = leaderboard.slice(3);
-  
-    return (
-      <div className="leaderboard-page">
-        <header className="leaderboard-page-header">
-            <button className="icon-button"><IconFilter/></button>
-            <h2>Leaderboard</h2>
-            <button className="icon-button"><IconUserPlus/></button>
-        </header>
-        <div className="leaderboard-content">
-            <div className="leaderboard-filter-tabs">
-                <button className={activeFilter === 'friends' ? 'active' : ''} onClick={() => setActiveFilter('friends')}>Friends</button>
-                <button className={activeFilter === 'global' ? 'active' : ''} onClick={() => setActiveFilter('global')}>Global</button>
-            </div>
-            <div className="top-performances-card">
-                <div className="top-performances-title">
-                    <IconCrown/> Top Performances
-                </div>
-                <LeaderboardPodium topThree={topThree} />
-            </div>
-            {restOfList.length > 0 && <LeaderboardList list={restOfList}/>}
-        </div>
-      </div>
-    );
-  };
-
 
 const HomePage = () => {
     const { profile, homeTab, setHomeTab, isMobile } = useAppContext();
@@ -1872,17 +1217,12 @@ const HomePage = () => {
     const renderMobileContent = () => {
         switch(homeTab) {
             case 'case': return <NewCaseTab />;
-            case 'progress': return <ProgressPage />;
-            case 'leaderboard': return <LeaderboardPage />;
             case 'home':
             default:
                 return (
                     <div className="home-dashboard">
                         <PromoBanner />
-                        <ResumeCaseCard />
                         <StartSimCard onStart={() => setHomeTab('case')} />
-                        <QuickActions />
-                        <TopPerformances />
                         <AivanaFooter />
                     </div>
                 );
@@ -1908,28 +1248,10 @@ const HomePage = () => {
             </div>
             
             <div className="home-page-layout">
-                <div className="home-page-left">
-                    <DashboardMetrics />
-                </div>
                 <div className="home-page-main">
-                    <div className="home-tab-nav">
-                        <button className={`tab-nav-button ${homeTab === 'case' ? 'active' : ''}`} onClick={() => setHomeTab('case')}>
-                            <IconStethoscope/> New Case
-                        </button>
-                        <button id="progress" className={`tab-nav-button ${homeTab === 'progress' ? 'active' : ''}`} onClick={() => setHomeTab('progress')}>
-                            <IconTrendingUp className=''/> Progress
-                        </button>
-                        <button id="leaderboard" className={`tab-nav-button ${homeTab === 'leaderboard' ? 'active' : ''}`} onClick={() => setHomeTab('leaderboard')}>
-                            <IconTrophy/> Leaderboard
-                        </button>
-                    </div>
-                    
                     <div className="home-content">
-                       {homeTab === 'case' ? <NewCaseTab /> : homeTab === 'progress' ? <ProgressPage /> : <LeaderboardPage />}
+                       <NewCaseTab />
                     </div>
-                </div>
-                <div className="home-page-right">
-                    <HomePageSidebar />
                 </div>
             </div>
         </main>
@@ -2224,7 +1546,7 @@ const QuestionsPanel = ({
                            <div className="finish-case-action">
                              <button className="button button-primary" onClick={onFinishCase} disabled={isFinishing}>
                                {isFinishing && <div className="loading-spinner"></div>}
-                               Finish Case & See Score
+                               Finish Case
                              </button>
                            </div>
                         )}
@@ -2338,13 +1660,13 @@ const ChatWindow = ({
             timestamp: new Date().toISOString()
         };
         
-        const thinkingMessage: ChatMessage = {
+        const patientThinkingMessage: ChatMessage = {
             sender: 'patient',
             text: 'Thinking...',
             timestamp: new Date().toISOString()
         };
 
-        setMessages(prev => [...prev, userMessage, thinkingMessage]);
+        setMessages(prev => [...prev, userMessage, patientThinkingMessage]);
         setUserInput('');
         setIsResponding(true);
 
@@ -2371,7 +1693,6 @@ const ChatWindow = ({
             setMessages(prev => [...prev.slice(0, -1), errorMessage]);
         } finally {
             setIsResponding(false);
-            setTimeout(() => setLatestPatientMessage(null), 2000); // Stop talking animation after 2s
         }
     };
 
@@ -2389,7 +1710,7 @@ const ChatWindow = ({
             </div>
             <div className="panel-content">
                 <div className="chat-window">
-                    {messages.map((msg, index) => (
+                    {messages.filter(msg => msg.sender !== 'patient').map((msg, index) => (
                         <div key={index} className={`chat-message ${msg.sender}`}>
                             <div className="message-bubble">{msg.text}</div>
                         </div>
@@ -2417,7 +1738,7 @@ const ChatWindow = ({
 
 const SimulationPage = () => {
     const { 
-        currentCase, isMobile, setPage, logCompletedCase, getHintCount, 
+        currentCase, isMobile, setPage, 
         hintCount, updateHintCount 
     } = useAppContext();
     
@@ -2517,73 +1838,15 @@ const SimulationPage = () => {
         setIsFinishing(true);
 
         try {
-            // --- SCORING RUBRIC ---
-            // 1. Diagnosis Accuracy (4.0 points)
-            const diagnosisCorrect = currentCase.potentialDiagnoses.find(d => d.diagnosis === selectedDiagnosis)?.isCorrect || false;
-            let diagnosisScore = diagnosisCorrect ? 4.0 : 0.0;
-            
-            // 2. Clinical Knowledge from MCQs (2.0 points)
-            const mcqTotal = currentCase.mcqs.length;
-            const mcqCorrectCount = Object.entries(selectedMcqAnswers).filter(([idx, answer]) =>
-                currentCase.mcqs[parseInt(idx)].correctAnswerIndex === answer
-            ).length;
-            let knowledgeScore = 0;
-            let hasMcqs = mcqTotal > 0;
-            if (hasMcqs) {
-                knowledgeScore = (mcqCorrectCount / mcqTotal) * 2.0;
-            } else {
-                // If no MCQs, redistribute these points to Diagnosis Accuracy
-                diagnosisScore += 2.0;
-            }
-
-            // 3. EPA Skills from Chat (4.0 points total)
-            const epaScores = await evaluateChatForEPAs(currentCase, messages);
-            const historyTakingAI = epaScores.find(s => s.epa === 'History-taking')?.score || 0;
-            const physicalExamAI = epaScores.find(s => s.epa === 'Physical Exam')?.score || 0;
-            
-            const historyTakingScore = (historyTakingAI / 10) * 2.5; // 2.5 points max
-            const physicalExamScore = (physicalExamAI / 10) * 1.5; // 1.5 points max
-
-            // 4. Hint Penalty
-            const hintsUsed = MAX_HINTS - getHintCount();
-            const hintPenalty = hintsUsed * 0.5;
-
-            // 5. Final Calculation
-            let finalScore = diagnosisScore + knowledgeScore + historyTakingScore + physicalExamScore - hintPenalty;
-            finalScore = Math.max(0, Math.min(10, finalScore)); // Clamp score between 0 and 10
-
-            const caseResultDetails: CaseResultDetails = {
-                diagnosisCorrect,
-                mcqCorrectCount,
-                mcqTotal,
-                epaScores: { history: historyTakingAI, physicalExam: physicalExamAI },
-                hintPenalty,
-                finalScore,
-                scoreBreakdown: {
-                    diagnosis: diagnosisScore,
-                    knowledge: knowledgeScore,
-                    historyTaking: historyTakingScore,
-                    physicalExam: physicalExamScore,
-                },
-                tags: currentCase.tags,
-            };
-            
-            await logCompletedCase({
-                case_title: currentCase.title,
-                case_details: caseResultDetails,
-                score: finalScore,
-            });
-            
             // Clear history for this case from local storage
             const chatHistoryKey = `chatHistory_${currentCase.title}`;
             localStorage.removeItem(chatHistoryKey);
-
         } catch(error) {
-            console.error("Error during case finishing and scoring:", error);
+            console.error("Error during case finishing:", error);
             // Optionally, show an error to the user
         } finally {
             setIsFinishing(false);
-            setPage('home');
+            setPage('home'); // Just return to home page
         }
     };
 
@@ -2683,11 +1946,56 @@ const SimulationPage = () => {
 const PatientVisualizer = ({ latestPatientMessage }: { latestPatientMessage: string | null }) => {
     const { currentCase, patientVideos } = useAppContext();
     const [isSpeaking, setIsSpeaking] = useState(false);
+    const [displayedMessage, setDisplayedMessage] = useState<string | null>(null);
     const [playersReady, setPlayersReady] = useState({ idle: false, talking: false });
     const idlePlayerRef = useRef<HTMLIFrameElement>(null);
     const talkingPlayerRef = useRef<HTMLIFrameElement>(null);
+    const audioRef = useRef<HTMLAudioElement>(null);
 
-    // Effect 1: Listen for player events from the iframes
+    const ELEVENLABS_API_KEY = "sk_534b7d31eca335c36de4403f34172517d3a46117adcedd64";
+
+    const getElevenLabsAudio = async (text: string, gender: 'Male' | 'Female' | null): Promise<string | null> => {
+        if (!text) return null;
+        
+        const femaleVoiceId = '21m00Tcm4TlvDq8ikWAM'; // Rachel
+        const maleVoiceId = 'pNInz6obpgDQGcFmaJgB';   // Adam
+        
+        const voiceId = gender === 'Male' ? maleVoiceId : femaleVoiceId;
+        const url = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`;
+        
+        try {
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Accept': 'audio/mpeg',
+                    'Content-Type': 'application/json',
+                    'xi-api-key': ELEVENLABS_API_KEY,
+                },
+                body: JSON.stringify({
+                    text: text,
+                    model_id: 'eleven_monolingual_v1',
+                    voice_settings: { stability: 0.5, similarity_boost: 0.5 },
+                }),
+            });
+
+            if (!response.ok) {
+                console.error('ElevenLabs API error:', response.statusText);
+                return null;
+            }
+
+            const audioBlob = await response.blob();
+            return URL.createObjectURL(audioBlob);
+        } catch (error) {
+            console.error('Error fetching TTS from ElevenLabs:', error);
+            return null;
+        }
+    };
+
+    useEffect(() => {
+        setDisplayedMessage(latestPatientMessage);
+    }, [latestPatientMessage]);
+
+    // Listen for player events from the iframes
     useEffect(() => {
         const handlePlayerMessage = (event: MessageEvent) => {
             if (event.origin !== 'https://play.gumlet.io') return;
@@ -2707,49 +2015,41 @@ const PatientVisualizer = ({ latestPatientMessage }: { latestPatientMessage: str
         return () => window.removeEventListener('message', handlePlayerMessage);
     }, []);
 
-    // Effect 2: Reset ready state when the case/videos change.
+    // Reset ready state when the case/videos change.
     useEffect(() => {
         if (patientVideos.idle && patientVideos.talking) {
             setPlayersReady({ idle: false, talking: false });
         }
     }, [patientVideos]);
 
-    // Effect 3: Control speaking state based on messages and audio playback
+    // Control speaking state and TTS playback with ElevenLabs
     useEffect(() => {
+        let audioUrl: string | null = null;
         let isMounted = true;
-        let audio: HTMLAudioElement | null = null;
-        let speakTimeout: NodeJS.Timeout | null = null;
-        
-        const cleanup = () => {
-            if (audio) {
-                audio.pause();
-                audio.src = '';
-                audio = null;
+
+        const playAudio = async () => {
+            if (displayedMessage && playersReady.idle && playersReady.talking) {
+                audioUrl = await getElevenLabsAudio(displayedMessage, patientVideos.gender);
+                if (isMounted && audioRef.current && audioUrl) {
+                    audioRef.current.src = audioUrl;
+                    audioRef.current.play().catch(e => console.error("Audio play failed:", e));
+                }
             }
-            if (speakTimeout) clearTimeout(speakTimeout);
-            setIsSpeaking(false);
         };
-
-        if (latestPatientMessage && playersReady.idle && playersReady.talking) {
-            setIsSpeaking(true);
-            
-            // Heuristic to estimate duration: ~150ms per character, with a min and max
-            const estimatedDuration = Math.max(2000, Math.min(10000, latestPatientMessage.length * 150));
-            
-            speakTimeout = setTimeout(() => {
-                if(isMounted) setIsSpeaking(false);
-            }, estimatedDuration);
-
-        } else if (!latestPatientMessage) {
-            cleanup();
-        }
         
+        playAudio();
+
         return () => {
             isMounted = false;
-            cleanup();
+            if (audioUrl) {
+                URL.revokeObjectURL(audioUrl);
+            }
+            if (audioRef.current) {
+                audioRef.current.pause();
+                audioRef.current.src = '';
+            }
         };
-
-    }, [latestPatientMessage, playersReady]);
+    }, [displayedMessage, playersReady, patientVideos.gender]);
     
     // If we have videos, render the players, otherwise show the fallback icon.
     if (!patientVideos.idle || !patientVideos.talking) {
@@ -2759,6 +2059,11 @@ const PatientVisualizer = ({ latestPatientMessage }: { latestPatientMessage: str
                     <IconPatient />
                     <p>{currentCase?.patientProfile.name || "Patient"}</p>
                 </div>
+                 {displayedMessage && (
+                    <p className="patient-subtitle-overlay" role="status">
+                        {displayedMessage}
+                    </p>
+                )}
             </div>
         );
     }
@@ -2783,6 +2088,21 @@ const PatientVisualizer = ({ latestPatientMessage }: { latestPatientMessage: str
                 className={`patient-video ${!isSpeaking ? 'hidden' : ''} ${!playersReady.talking ? 'hidden' : ''}`}
                 allow="autoplay; fullscreen"
             ></iframe>
+            <audio
+                ref={audioRef}
+                onPlay={() => setIsSpeaking(true)}
+                onEnded={() => setIsSpeaking(false)}
+                onError={() => {
+                    console.error("Audio playback error.");
+                    setIsSpeaking(false);
+                }}
+                hidden
+            />
+            {displayedMessage && (
+                <p className="patient-subtitle-overlay" role="status">
+                    {displayedMessage}
+                </p>
+            )}
         </div>
     );
 };
