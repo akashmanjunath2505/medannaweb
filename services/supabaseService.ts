@@ -5,9 +5,7 @@
 import { createClient, Session, User, AuthError } from '@supabase/supabase-js';
 import { TrainingPhase, Specialty, CognitiveSkill, EPA } from './geminiService';
 
-// --- DATABASE SCHEMA (DEFINED FIRST FOR TYPE RESOLUTION) ---
-
-// Define Json type to prevent recursion with complex objects.
+// Define the Json type locally, as it's no longer exported from supabase-js
 export type Json =
   | string
   | number
@@ -15,6 +13,9 @@ export type Json =
   | null
   | { [key: string]: Json | undefined }
   | Json[];
+
+
+// --- DATABASE SCHEMA (DEFINED FIRST FOR TYPE RESOLUTION) ---
 
 // Define the specific shape of the case_details JSON object for type safety.
 // This resolves issues with recursive type definitions that can cause compiler errors.
@@ -58,7 +59,7 @@ export type Database = {
     Tables: {
       case_logs: {
         Row: {
-          case_details: Json | null
+          case_details: Json
           case_title: string
           created_at: string
           id: number
@@ -66,7 +67,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
-          case_details: Json | null
+          case_details: Json
           case_title: string
           created_at?: string
           id?: number
@@ -74,13 +75,22 @@ export type Database = {
           user_id: string
         }
         Update: {
-          case_details?: Json | null
+          case_details?: Json
           case_title?: string
           created_at?: string
           id?: number
           score?: number
           user_id?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: "case_logs_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          }
+        ]
       }
       leaderboard: {
         Row: {
@@ -95,6 +105,15 @@ export type Database = {
           score?: number
           user_id?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: "leaderboard_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          }
+        ]
       }
       notifications: {
         Row: {
@@ -127,6 +146,15 @@ export type Database = {
           type?: NotificationTypeEnum
           user_id?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          }
+        ]
       }
       profiles: {
         Row: {
@@ -144,6 +172,15 @@ export type Database = {
           full_name?: string | null
           id?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: "profiles_id_fkey"
+            columns: ["id"]
+            isOneToOne: true
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          }
+        ]
       }
       progress: {
         Row: {
@@ -164,6 +201,15 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: "progress_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          }
+        ]
       }
       streaks: {
         Row: {
@@ -184,6 +230,37 @@ export type Database = {
           max_streak?: number
           user_id?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: "streaks_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+    }
+    Views: {}
+    Functions: {}
+    CompositeTypes: {}
+  }
+  auth: {
+    Tables: {
+      users: {
+        Row: {
+          id: string
+          [key: string]: any
+        }
+        Insert: {
+          id?: string
+          [key: string]: any
+        }
+        Update: {
+          id?: string
+          [key: string]: any
+        }
+        Relationships: []
       }
     }
     Views: {}
@@ -405,7 +482,7 @@ export const logCaseCompletion = async (
         const caseLogInsert: Database['public']['Tables']['case_logs']['Insert'] = {
             user_id: userId,
             case_title: caseResult.case_title,
-            case_details: caseResult.case_details as Json,
+            case_details: caseResult.case_details as unknown as Json,
             score: caseResult.score,
         };
 

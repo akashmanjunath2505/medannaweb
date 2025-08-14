@@ -1377,7 +1377,7 @@ const QuickActions = () => {
 
     const accuracy = useMemo(() => {
         if (!caseLogs || caseLogs.length === 0) return 91.2; // Placeholder
-        const correctCount = caseLogs.filter(log => (log.case_details as CaseResultDetails | null)?.diagnosisCorrect).length;
+        const correctCount = caseLogs.filter(log => (log.case_details as unknown as CaseResultDetails | null)?.diagnosisCorrect).length;
         return (correctCount / caseLogs.length) * 100;
     }, [caseLogs]);
 
@@ -1482,10 +1482,10 @@ const MyCasesTab = () => {
         }
     };
     
-    const getScoreColor = (score: number) => {
-        if (score >= 90) return 'green';
-        if (score >= 75) return 'orange';
-        return 'red';
+    const getScoreColorClass = (score: number) => {
+        if (score >= 90) return 'rating-good';
+        if (score >= 75) return 'rating-medium';
+        return 'rating-bad';
     };
 
     const recentActivityCase = caseLogs[0];
@@ -1510,7 +1510,7 @@ const MyCasesTab = () => {
             {caseHistory.length > 0 && <h3 className="view-section-title">Case History</h3>}
             <div className="case-history-list">
                 {caseHistory.map(log => {
-                    const details = log.case_details as CaseResultDetails | null;
+                    const details = log.case_details as unknown as CaseResultDetails | null;
                     if (!details) return null;
                     const specialty = inferSpecialtyFromTitle(log.case_title);
                     const Icon = getSpecialtyIcon(specialty);
@@ -1530,7 +1530,7 @@ const MyCasesTab = () => {
                                 </div>
                             </div>
                             <div className="case-history-meta">
-                                <span className={`case-history-score score-${getScoreColor(scorePercent)}`}>
+                                <span className={`case-history-score score-${getScoreColorClass(scorePercent)}`}>
                                     <IconCheckCircle /> {scorePercent}%
                                 </span>
                                 <span className="case-history-time">{timeAgo(log.created_at)}</span>
@@ -1590,7 +1590,7 @@ const RadarChart = ({ data }: { data: { label: string, value: number }[] }) => {
                 </g>
             ))}
             {/* Data Polygon */}
-            <polygon points={points} fill="rgba(74, 108, 253, 0.4)" stroke="var(--color-primary)" strokeWidth="1.5" />
+            <polygon points={points} fill="rgba(79, 70, 229, 0.4)" stroke="var(--color-brand)" strokeWidth="1.5" />
         </svg>
     );
 };
@@ -1647,18 +1647,18 @@ const PerformanceTab = () => {
 
         const calcAccuracy = (logs: CaseLog[]) => {
             if (logs.length === 0) return 0;
-            const correct = logs.filter(l => (l.case_details as CaseResultDetails | null)?.diagnosisCorrect).length;
+            const correct = logs.filter(l => (l.case_details as unknown as CaseResultDetails | null)?.diagnosisCorrect).length;
             return (correct / logs.length) * 100;
         };
         
         const overallAccuracy = calcAccuracy(caseLogs);
         
         const epaHistoryTaking = caseLogs.length > 0
-            ? caseLogs.reduce((acc, log) => acc + ((log.case_details as CaseResultDetails | null)?.epaScores.history || 0), 0) / caseLogs.length
+            ? caseLogs.reduce((acc, log) => acc + ((log.case_details as unknown as CaseResultDetails | null)?.epaScores?.history || 0), 0) / caseLogs.length
             : 70;
 
         const epaPhysicalExam = caseLogs.length > 0
-            ? caseLogs.reduce((acc, log) => acc + ((log.case_details as CaseResultDetails | null)?.epaScores.physicalExam || 0), 0) / caseLogs.length
+            ? caseLogs.reduce((acc, log) => acc + ((log.case_details as unknown as CaseResultDetails | null)?.epaScores?.physicalExam || 0), 0) / caseLogs.length
             : 43;
             
         const diagnosisAccuracy = overallAccuracy > 0 ? overallAccuracy : 79;
@@ -1690,10 +1690,10 @@ const PerformanceTab = () => {
         };
     }, [caseLogs]);
 
-    const getProgressBarColor = (score: number) => {
-        if (score >= 80) return '#34C759'; // green
-        if (score >= 50) return '#FF9500'; // orange
-        return '#FF3B30'; // red
+    const getProgressBarColorClass = (score: number) => {
+        if (score >= 80) return 'rating-good';
+        if (score >= 50) return 'rating-medium';
+        return 'rating-bad';
     };
 
     return (
@@ -1728,8 +1728,8 @@ const PerformanceTab = () => {
              <div className="performance-section">
                 <h3>ACCURACY</h3>
                 <div className="accuracy-donuts-container">
-                    <DonutChart percentage={performanceData.accuracyToday} color="#34C759" label="Today"/>
-                    <DonutChart percentage={performanceData.accuracyThisWeek} color="#007AFF" label="This Week"/>
+                    <DonutChart percentage={performanceData.accuracyToday} color="var(--color-success)" label="Today"/>
+                    <DonutChart percentage={performanceData.accuracyThisWeek} color="var(--color-brand)" label="This Week"/>
                     <DonutChart percentage={performanceData.accuracyOverall} color="#AF52DE" label="Overall"/>
                 </div>
             </div>
@@ -1744,7 +1744,7 @@ const PerformanceTab = () => {
                                 <span>{stat.score.toFixed(1)}/100 Score</span>
                              </div>
                              <div className="progress-bar-container">
-                                 <div className="progress-bar-fill" style={{ width: `${stat.score}%`, backgroundColor: getProgressBarColor(stat.score) }}></div>
+                                 <div className={`progress-bar-fill progress-bar-${getProgressBarColorClass(stat.score)}`} style={{ width: `${stat.score}%` }}></div>
                              </div>
                          </div>
                     ))}
@@ -2302,6 +2302,119 @@ const SimulationHeaderMobile = ({
 };
 
 
+const ChatWindow = ({
+    chat,
+    messages,
+    setMessages,
+    setLatestPatientMessage,
+    onRequestHint,
+    isGeneratingHint
+}: {
+    chat: Chat | null;
+    messages: ChatMessage[];
+    setMessages: (messages: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])) => void;
+    setLatestPatientMessage: (message: string | null) => void;
+    onRequestHint?: () => void;
+    isGeneratingHint?: boolean;
+}) => {
+    const [userInput, setUserInput] = useState('');
+    const [isResponding, setIsResponding] = useState(false);
+    const messagesEndRef = useRef<HTMLDivElement>(null);
+    const { hintCount, isMobile } = useAppContext();
+
+    const scrollToBottom = () => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    };
+
+    useEffect(scrollToBottom, [messages]);
+
+    const handleSendMessage = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!userInput.trim() || !chat || isResponding) return;
+
+        const userMessage: ChatMessage = {
+            sender: 'user',
+            text: userInput,
+            timestamp: new Date().toISOString()
+        };
+        
+        const thinkingMessage: ChatMessage = {
+            sender: 'patient',
+            text: 'Thinking...',
+            timestamp: new Date().toISOString()
+        };
+
+        setMessages(prev => [...prev, userMessage, thinkingMessage]);
+        setUserInput('');
+        setIsResponding(true);
+
+        try {
+            const response = await chat.sendMessage({ message: userInput });
+            const patientResponseText = response.text;
+
+            const patientMessage: ChatMessage = {
+                sender: 'patient',
+                text: patientResponseText,
+                timestamp: new Date().toISOString()
+            };
+
+            setMessages(prev => [...prev.slice(0, -1), patientMessage]);
+            setLatestPatientMessage(patientResponseText);
+
+        } catch (error) {
+            console.error("Error sending message:", error);
+            const errorMessage: ChatMessage = {
+                sender: 'system',
+                text: "Sorry, I'm having trouble responding right now. Please try again.",
+                timestamp: new Date().toISOString()
+            };
+            setMessages(prev => [...prev.slice(0, -1), errorMessage]);
+        } finally {
+            setIsResponding(false);
+            setTimeout(() => setLatestPatientMessage(null), 2000); // Stop talking animation after 2s
+        }
+    };
+
+    return (
+        <div className="panel chat-panel">
+            <div className="panel-header">
+                <h3>Chat with Patient</h3>
+                {!isMobile && onRequestHint && isGeneratingHint !== undefined && (
+                    <button className="button button-outline hint-button" onClick={onRequestHint} disabled={isGeneratingHint || hintCount <= 0}>
+                        <IconLightbulb/>
+                        <span>Hint ({hintCount})</span>
+                        {isGeneratingHint && <div className="loading-spinner-inline"></div>}
+                    </button>
+                )}
+            </div>
+            <div className="panel-content">
+                <div className="chat-window">
+                    {messages.map((msg, index) => (
+                        <div key={index} className={`chat-message ${msg.sender}`}>
+                            <div className="message-bubble">{msg.text}</div>
+                        </div>
+                    ))}
+                    <div ref={messagesEndRef} />
+                </div>
+                <form className="chat-input-form" onSubmit={handleSendMessage}>
+                    <input
+                        type="text"
+                        className="chat-input"
+                        placeholder="Ask a question..."
+                        value={userInput}
+                        onChange={(e) => setUserInput(e.target.value)}
+                        disabled={isResponding}
+                        aria-label="Your message"
+                    />
+                    <button type="submit" className="send-button" disabled={isResponding || !userInput.trim()} aria-label="Send message">
+                       {isResponding ? <div className="loading-spinner"></div> : <IconSend/>}
+                    </button>
+                </form>
+            </div>
+        </div>
+    );
+};
+
 const SimulationPage = () => {
     const { 
         currentCase, isMobile, setPage, logCompletedCase, getHintCount, 
@@ -2480,7 +2593,7 @@ const SimulationPage = () => {
     if (isMobile) {
         return (
             <main className={`app-container simulation-page mobile-view tab-${activeTab}`}>
-                {activeTab === 'chat' && <PatientVisualizer latestPatientMessage={null} />}
+                {activeTab === 'chat' && <PatientVisualizer latestPatientMessage={latestPatientMessage} />}
                 
                 <SimulationHeaderMobile 
                     activeTab={activeTab} 
@@ -2497,8 +2610,6 @@ const SimulationPage = () => {
                         messages={messages}
                         setMessages={setMessages}
                         setLatestPatientMessage={setLatestPatientMessage}
-                        onRequestHint={handleRequestHint}
-                        isGeneratingHint={isGeneratingHint}
                     />
                 )}
 
@@ -2603,369 +2714,128 @@ const PatientVisualizer = ({ latestPatientMessage }: { latestPatientMessage: str
         }
     }, [patientVideos]);
 
-    // Effect 3: Attach app-level speech listeners to control the speaking state.
+    // Effect 3: Control speaking state based on messages and audio playback
     useEffect(() => {
-        const handleSpeechStart = () => setIsSpeaking(true);
-        const handleSpeechEnd = () => setIsSpeaking(false);
-        window.addEventListener('speech-start', handleSpeechStart);
-        window.addEventListener('speech-end', handleSpeechEnd);
+        let isMounted = true;
+        let audio: HTMLAudioElement | null = null;
+        let speakTimeout: NodeJS.Timeout | null = null;
+        
+        const cleanup = () => {
+            if (audio) {
+                audio.pause();
+                audio.src = '';
+                audio = null;
+            }
+            if (speakTimeout) clearTimeout(speakTimeout);
+            setIsSpeaking(false);
+        };
+
+        if (latestPatientMessage && playersReady.idle && playersReady.talking) {
+            setIsSpeaking(true);
+            
+            // Heuristic to estimate duration: ~150ms per character, with a min and max
+            const estimatedDuration = Math.max(2000, Math.min(10000, latestPatientMessage.length * 150));
+            
+            speakTimeout = setTimeout(() => {
+                if(isMounted) setIsSpeaking(false);
+            }, estimatedDuration);
+
+        } else if (!latestPatientMessage) {
+            cleanup();
+        }
+        
         return () => {
-            window.removeEventListener('speech-start', handleSpeechStart);
-            window.removeEventListener('speech-end', handleSpeechEnd);
-        };
-    }, []);
-
-    // Effect 4: Control which player is active based on `isSpeaking` and `playersReady` states.
-    useEffect(() => {
-        const idlePlayer = idlePlayerRef.current;
-        const talkingPlayer = talkingPlayerRef.current;
-
-        if (!playersReady.idle || !playersReady.talking || !idlePlayer || !talkingPlayer) {
-            return;
-        }
-
-        const post = (player: HTMLIFrameElement, method: 'play' | 'pause') => {
-            player.contentWindow?.postMessage({ method, value: '' }, 'https://play.gumlet.io');
+            isMounted = false;
+            cleanup();
         };
 
-        if (isSpeaking) {
-            post(idlePlayer, 'pause');
-            post(talkingPlayer, 'play');
-        } else {
-            post(talkingPlayer, 'pause');
-            post(idlePlayer, 'play');
-        }
-    }, [isSpeaking, playersReady]);
-
-    if (!currentCase) return null;
-
-    const hasVideos = patientVideos.idle && patientVideos.talking;
-    const idleSrc = hasVideos ? `https://play.gumlet.io/embed/${patientVideos.idle}?api=true&loop=true&muted=true&disable_player_ui=true&disable_context_menu=true&disable_player_analytics=true&autoplay=true` : '';
-    const talkingSrc = hasVideos ? `https://play.gumlet.io/embed/${patientVideos.talking}?api=true&loop=true&muted=true&disable_player_ui=true&disable_context_menu=true&disable_player_analytics=true&autoplay=true` : '';
-
+    }, [latestPatientMessage, playersReady]);
+    
+    // If we have videos, render the players, otherwise show the fallback icon.
+    if (!patientVideos.idle || !patientVideos.talking) {
+        return (
+            <div className="patient-visualizer">
+                <div className="patient-icon-fallback">
+                    <IconPatient />
+                    <p>{currentCase?.patientProfile.name || "Patient"}</p>
+                </div>
+            </div>
+        );
+    }
+    
     return (
         <div className="patient-visualizer">
-            {hasVideos ? (
-                <>
-                    <iframe
-                        key={patientVideos.idle}
-                        ref={idlePlayerRef}
-                        src={idleSrc}
-                        title="Patient Idle Animation"
-                        className={`patient-video ${!isSpeaking ? 'visible' : ''}`}
-                        allow="autoplay; encrypted-media"
-                        allowFullScreen={false}
-                    />
-                    <iframe
-                        key={patientVideos.talking}
-                        ref={talkingPlayerRef}
-                        src={talkingSrc}
-                        title="Patient Talking Animation"
-                        className={`patient-video ${isSpeaking ? 'visible' : ''}`}
-                        allow="autoplay; encrypted-media"
-                        allowFullScreen={false}
-                    />
-                </>
-            ) : (
-                <div className="patient-icon-fallback">
-                    <div className={`patient-icon ${isSpeaking ? 'speaking' : ''}`}>
-                        <IconPatient />
-                    </div>
-                </div>
-            )}
-            {latestPatientMessage && (
-                <p className="patient-message-overlay">{latestPatientMessage}</p>
-            )}
-        </div>
-    );
-};
-
-const ChatWindow = ({ chat, messages, setMessages, setLatestPatientMessage, onRequestHint, isGeneratingHint }: {
-    chat: Chat | null;
-    messages: ChatMessage[];
-    setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
-    setLatestPatientMessage: (message: string | null) => void;
-    onRequestHint: () => void;
-    isGeneratingHint: boolean;
-}) => {
-    const { 
-        currentCase, hintCount, isMobile, profile
-    } = useAppContext();
-    
-    const [userInput, setUserInput] = useState('');
-    const [isLoading, setIsLoading] = useState(false);
-    const [isMuted, setIsMuted] = useState(false);
-    const [speechError, setSpeechError] = useState<string | null>(null);
-    const [isChatMinimized, setIsChatMinimized] = useState(false);
-    const messagesEndRef = useRef<HTMLDivElement>(null);
-    const textareaRef = useRef<HTMLTextAreaElement>(null);
-    const audioElRef = useRef<HTMLAudioElement>(null);
-
-    // --- TTS Configuration ---
-    // IMPORTANT: API keys should NOT be in client-side code. This key is retrieved from
-    // the execution environment, similar to the Gemini key, and is not exposed to the user.
-    const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
-
-    // Helper for ElevenLabs voice selection
-    const getVoiceId = (age: number, gender: 'Male' | 'Female' | 'Other'): string => {
-        if (gender === 'Male') {
-            return 'pNInz6obpgDQGcFmaJgB'; // Adam
-        }
-        // Default to female for 'Female' or 'Other'
-        return 'EXAVITQu4vr4xnSDxMaL'; // Bella
-    };
-
-    useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [messages]);
-
-    // Setup for the persistent audio element
-    useEffect(() => {
-        const audioEl = audioElRef.current;
-        if (!audioEl) return;
-
-        const cleanupAndEndSpeech = () => {
-            window.dispatchEvent(new CustomEvent('speech-end'));
-            if (audioEl.src && audioEl.src.startsWith('blob:')) {
-                URL.revokeObjectURL(audioEl.src);
-            }
-        };
-        
-        const handlePause = () => {
-            window.dispatchEvent(new CustomEvent('speech-end'));
-        }
-
-        audioEl.addEventListener('ended', cleanupAndEndSpeech);
-        audioEl.addEventListener('error', cleanupAndEndSpeech);
-        audioEl.addEventListener('abort', cleanupAndEndSpeech);
-        audioEl.addEventListener('pause', handlePause);
-        
-        return () => {
-            audioEl.removeEventListener('ended', cleanupAndEndSpeech);
-            audioEl.removeEventListener('error', cleanupAndEndSpeech);
-            audioEl.removeEventListener('abort', cleanupAndEndSpeech);
-            audioEl.removeEventListener('pause', handlePause);
-        };
-    }, []);
-    
-    // Stop audio when component unmounts or case changes
-    useEffect(() => {
-        return () => {
-            const audioEl = audioElRef.current;
-            if (audioEl) {
-                audioEl.pause();
-            }
-        }
-    }, [currentCase]);
-
-
-    const speak = useCallback(async (text: string, age: number, gender: 'Male' | 'Female' | 'Other') => {
-        setSpeechError(null);
-        const audioEl = audioElRef.current;
-        if (!audioEl) return;
-
-        audioEl.pause();
-
-        if (isMuted || !text) return;
-        if (!ELEVENLABS_API_KEY) {
-            setSpeechError("TTS API key is not configured.");
-            return;
-        }
-
-        const cleanText = text.replace(/\*.*?\*/g, '').replace(/\s+/g, ' ').trim();
-        if (!cleanText) return;
-        
-        window.dispatchEvent(new CustomEvent('speech-start'));
-        
-        try {
-            const voiceId = getVoiceId(age, gender);
-            const url = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`;
-            const headers = {
-                'Accept': 'audio/mpeg',
-                'xi-api-key': ELEVENLABS_API_KEY,
-                'Content-Type': 'application/json',
-            };
-            const body = JSON.stringify({
-                text: cleanText,
-                model_id: 'eleven_multilingual_v2',
-                voice_settings: { stability: 0.5, similarity_boost: 0.75 },
-            });
-
-            const response = await fetch(url, { method: 'POST', headers, body });
-            
-            if (!response.ok) {
-                let errorText = `HTTP error! status: ${response.status}`;
-                try {
-                    const errorData = await response.json();
-                    if (errorData.detail?.message) errorText = errorData.detail.message;
-                } catch(e) {/* no json body */}
-                throw new Error(`ElevenLabs API error: ${errorText}`);
-            }
-            
-            const blob = await response.blob();
-            if (blob.size === 0) {
-                throw new Error("Received empty audio data from ElevenLabs API.");
-            }
-            
-            const audioUrl = URL.createObjectURL(blob);
-            audioEl.src = audioUrl;
-            
-            audioEl.play().catch(e => {
-                console.error("Audio playback failed (ElevenLabs):", e);
-                setSpeechError("Could not play audio. Please ensure your browser allows autoplay.");
-                window.dispatchEvent(new CustomEvent('speech-end'));
-                URL.revokeObjectURL(audioUrl);
-            });
-
-        } catch (error) {
-            console.error("ElevenLabs API error:", error);
-            setSpeechError(`TTS failed. ${error instanceof Error ? error.message : "Unknown error"}`);
-            window.dispatchEvent(new CustomEvent('speech-end'));
-        }
-    }, [isMuted, ELEVENLABS_API_KEY]);
-
-
-    const handleSendMessage = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!userInput.trim() || !chat || isLoading) return;
-        const userMessage: ChatMessage = { sender: 'user', text: userInput, timestamp: new Date().toISOString() };
-        setMessages(prev => [...prev, userMessage]);
-        setUserInput('');
-        setIsLoading(true);
-        setLatestPatientMessage('...');
-
-        try {
-            const response = await chat.sendMessage({ message: userInput });
-            const patientMessage: ChatMessage = { sender: 'patient', text: response.text, timestamp: new Date().toISOString() };
-            setMessages(prev => [...prev, patientMessage]);
-            setLatestPatientMessage(response.text);
-            if(currentCase?.patientProfile) {
-                speak(response.text, currentCase.patientProfile.age, currentCase.patientProfile.gender);
-            }
-        } catch (error) {
-            console.error('Error sending message:', error);
-            const errorText = `Sorry, I'm having trouble communicating. (${error instanceof Error ? error.message : "Unknown error"})`;
-            const errorMessage: ChatMessage = { sender: 'patient', text: errorText, timestamp: new Date().toISOString() };
-            setMessages(prev => [...prev, errorMessage]);
-            setLatestPatientMessage(errorText);
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    // Auto-resize textarea
-    useEffect(() => {
-        if (textareaRef.current) {
-            textareaRef.current.style.height = 'auto'; // Reset height
-            const scrollHeight = textareaRef.current.scrollHeight;
-            textareaRef.current.style.height = `${scrollHeight}px`;
-        }
-    }, [userInput]);
-
-    const chatWindowClass = `panel chat-window ${isMobile && isChatMinimized ? 'minimized' : ''}`;
-
-    return (
-        <div className={chatWindowClass}>
-            <audio ref={audioElRef} style={{ display: 'none' }} />
-            {!isMobile && (
-                 <div className="chat-header">
-                    <div className="chat-header-info">
-                        <h3>Chat with {currentCase && currentCase.patientProfile.age < 7 ? "Patient's Mother" : 'Patient'}</h3>
-                        <p>Ask {currentCase?.patientProfile.name || 'the patient'} questions.</p>
-                    </div>
-                    <div className="hint-button-container">
-                        <span className="hint-count" title={`${hintCount} hints remaining`}>{hintCount}</span>
-                        <button className="button button-outline" onClick={onRequestHint}
-                            disabled={isGeneratingHint || hintCount <= 0} title={hintCount > 0 ? "Get a hint" : "No hints remaining"}>
-                             <IconLightbulb /> Get Hint
-                        </button>
-                    </div>
-                </div>
-            )}
-           
-            <div className="chat-messages">
-                {messages.length === 0 ? <div className="chat-empty-state">No messages yet. Start the conversation.</div> : messages.map((msg, index) => {
-                    if (msg.sender === 'system') {
-                        return (
-                            <div key={index} className="chat-message message-system">
-                                <div className="avatar-icon hint-icon"><IconMapPin /></div>
-                                <div className="chat-bubble">{msg.text}</div>
-                            </div>
-                        );
-                    }
-                    return (
-                        <div key={index} className={`chat-message message-${msg.sender}`}>
-                            <div className="avatar-icon">
-                               {msg.sender === 'user' ? (
-                                    <div className="profile-avatar-chat">{getInitials(profile?.full_name)}</div>
-                                ) : (
-                                    <IconPatient />
-                                )}
-                            </div>
-                            <div className="chat-bubble">{msg.text}</div>
-                        </div>
-                    );
-                })}
-                {isLoading && <div className="chat-message message-patient"><div className="avatar-icon"><IconPatient /></div><div className="chat-bubble">Thinking...</div></div>}
-                <div ref={messagesEndRef} />
+            <div className={`patient-icon-fallback ${patientVideos.idle && playersReady.idle ? 'hidden' : ''}`}>
+                <IconPatient />
+                <p>Loading Patient Avatar...</p>
             </div>
-
-            {speechError && (
-                 <div className="speech-alert"><IconAlertTriangle /><span>{speechError}</span><button className="close-button" onClick={() => setSpeechError(null)}><IconClose /></button></div>
-            )}
-            <form className="chat-input-form" onSubmit={handleSendMessage}>
-                <button 
-                    type="button" 
-                    className="icon-button" 
-                    onClick={() => setIsMuted(!isMuted)} 
-                    aria-label={isMuted ? 'Unmute' : 'Mute'}
-                    title={isMuted ? 'Unmute' : 'Mute'}
-                >
-                    {isMuted ? <IconVolumeOff /> : <IconVolume />}
-                </button>
-                <textarea ref={textareaRef} value={userInput} onChange={e => setUserInput(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(e); } }}
-                    placeholder={`Message ${currentCase && currentCase.patientProfile.age < 7 ? "the mother" : currentCase?.patientProfile.name}...`} rows={1} disabled={isLoading || !chat} />
-                <button type="submit" className="icon-button button-primary" disabled={isLoading || !userInput.trim()}>
-                    {isLoading ? <div className="loading-spinner"></div> : <IconSend />}
-                </button>
-                 {isMobile && (
-                    <button type="button" className="icon-button chat-toggle-button" onClick={() => setIsChatMinimized(!isChatMinimized)}>
-                        {isChatMinimized ? <IconChevronUp /> : <IconChevronDown />}
-                    </button>
-                 )}
-            </form>
+            <iframe
+                ref={idlePlayerRef}
+                src={`https://play.gumlet.io/embed/${patientVideos.idle}?loop=1&autoplay=1&mute=1&disable_hotkeys=1&disable_ui=all`}
+                title="Idle Patient Video"
+                className={`patient-video ${isSpeaking ? 'hidden' : ''} ${!playersReady.idle ? 'hidden' : ''}`}
+                allow="autoplay; fullscreen"
+            ></iframe>
+            <iframe
+                ref={talkingPlayerRef}
+                src={`https://play.gumlet.io/embed/${patientVideos.talking}?loop=1&autoplay=1&mute=1&disable_hotkeys=1&disable_ui=all`}
+                title="Talking Patient Video"
+                className={`patient-video ${!isSpeaking ? 'hidden' : ''} ${!playersReady.talking ? 'hidden' : ''}`}
+                allow="autoplay; fullscreen"
+            ></iframe>
         </div>
     );
 };
 
-// --- MAIN APP COMPONENT ---
 const App = () => {
-    const { session, isAuthLoading, page, homeTab, isGenerating, isMobile, isMobileMenuOpen, setIsMobileMenuOpen } = useAppContext();
+    const { session, page, isGenerating, generationError, isAuthLoading, authError, isMobileMenuOpen, setIsMobileMenuOpen } = useAppContext();
 
-    const renderPage = () => {
-        if (isAuthLoading) {
-            return <div className="global-loading-spinner"><div className="loading-spinner"></div></div>;
-        }
-        if (!session) {
-            return <AuthPage />;
-        }
-        switch (page) {
-            case 'simulation': return <SimulationPage />;
-            case 'home':
-            default:
-                return <HomePage />;
-        }
-    };
-    
+    if (isAuthLoading) {
+        return (
+             <div className="splash-overlay">
+                <div className="splash-content">
+                    <div className="loading-spinner"></div>
+                    <h2>MedAnna</h2>
+                    <p>Loading your session...</p>
+                </div>
+            </div>
+        );
+    }
+
+    if (authError) {
+         return (
+             <div className="splash-overlay">
+                <div className="splash-content">
+                    <IconAlertTriangle className="alert-icon"/>
+                    <h2>Error</h2>
+                    <p>{authError}</p>
+                    <button className="button" onClick={() => window.location.reload()}>Try Again</button>
+                </div>
+            </div>
+        );
+    }
+
     return (
-        <div className="app-wrapper">
-           {page !== 'simulation' && <AppHeader/>}
-           {isGenerating && <GeneratingCaseSplash />}
-           {isMobile && isMobileMenuOpen && <MobileProfileMenu onClose={() => setIsMobileMenuOpen(false)} />}
-           {renderPage()}
-        </div>
-    )
+        <>
+            <AppHeader />
+
+            {session ? (
+                page === 'home' ? <HomePage /> : <SimulationPage />
+            ) : (
+                <AuthPage />
+            )}
+
+            {isGenerating && <GeneratingCaseSplash />}
+
+            {generationError && (
+                 <ExplanationModal title="Generation Error" onClose={() => { /* This should be handled in context */ }} icon={<IconAlertTriangle/>}>
+                    {generationError}
+                 </ExplanationModal>
+            )}
+            
+            {isMobileMenuOpen && <MobileProfileMenu onClose={() => setIsMobileMenuOpen(false)} />}
+        </>
+    );
 };
 
 const root = createRoot(document.getElementById('root')!);
