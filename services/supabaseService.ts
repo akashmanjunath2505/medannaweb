@@ -17,15 +17,12 @@ export type Json =
 
 // --- DATABASE SCHEMA (DEFINED FIRST FOR TYPE RESOLUTION) ---
 
-// To fix TypeScript errors related to "Type instantiation is excessively deep and possibly infinite",
-// we must avoid circular type references. The original `Database` type had its tables refer back to
-// the `Database` type itself to get an enum definition, creating a loop.
-//
-// The fix is to define the enum type *outside* of the `Database` type. This breaks the recursion,
-// allowing TypeScript's type inference to work correctly for Supabase client methods like `update` and `insert`.
+// Define the enum type separately to avoid potential circular dependencies in the Database type.
 export type NotificationTypeEnum = "achievement" | "reminder" | "new_feature" | "system_message";
 
-
+// To fix TypeScript errors like "Type instantiation is excessively deep", the schema must be
+// structured correctly for the Supabase client's type inference. We define enums within the
+// `Database` type itself and reference them from the table definitions.
 export type Database = {
   public: {
     Tables: {
@@ -60,14 +57,6 @@ export type Database = {
           type?: NotificationTypeEnum
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "notifications_user_id_fkey"
-            columns: ["user_id"]
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          }
-        ]
       }
       profiles: {
         Row: {
@@ -85,11 +74,13 @@ export type Database = {
           full_name?: string | null
           id?: string
         }
-        Relationships: []
       }
     }
     Views: {}
     Functions: {}
+    Enums: {
+      notification_type: NotificationTypeEnum
+    }
     CompositeTypes: {}
   }
 }

@@ -1955,7 +1955,10 @@ const PatientVisualizer = ({ latestPatientMessage }: { latestPatientMessage: str
     const ELEVENLABS_API_KEY = "sk_534b7d31eca335c36de4403f34172517d3a46117adcedd64";
 
     const getElevenLabsAudio = async (text: string, gender: 'Male' | 'Female' | null): Promise<string | null> => {
-        if (!text) return null;
+        if (!text || text.trim().length === 0) {
+            console.log("TTS skipped for empty message.");
+            return null;
+        }
         
         const femaleVoiceId = '21m00Tcm4TlvDq8ikWAM'; // Rachel
         const maleVoiceId = 'pNInz6obpgDQGcFmaJgB';   // Adam
@@ -1979,14 +1982,36 @@ const PatientVisualizer = ({ latestPatientMessage }: { latestPatientMessage: str
             });
 
             if (!response.ok) {
-                console.error('ElevenLabs API error:', response.statusText);
+                const errorBody = await response.json().catch(() => response.text());
+                console.error('ElevenLabs API request failed:', response.status, response.statusText, errorBody);
+                return null;
+            }
+
+            if (response.headers.get('Content-Type')?.includes('application/json')) {
+                const errorBody = await response.json();
+                console.error('ElevenLabs returned a JSON error instead of audio:', errorBody);
+                return null;
+            }
+
+            if (response.headers.get('Content-Type') !== 'audio/mpeg') {
+                const bodySnippet = await response.text().then(t => t.slice(0, 200));
+                console.error('ElevenLabs returned an unexpected content type:', response.headers.get('Content-Type'), 'Body Snippet:', bodySnippet);
                 return null;
             }
 
             const audioBlob = await response.blob();
+            // A valid audio file should be larger than a simple error message.
+            if (audioBlob.size < 1024) { 
+                console.error('ElevenLabs returned an unexpectedly small audio file, which may be an error.', `Size: ${audioBlob.size} bytes`);
+                 // Try to read it as text to see if it's an error message
+                const textError = await audioBlob.text().catch(() => "Could not read blob as text.");
+                console.error("Blob content as text:", textError);
+                return null;
+            }
+
             return URL.createObjectURL(audioBlob);
         } catch (error) {
-            console.error('Error fetching TTS from ElevenLabs:', error);
+            console.error('Error during TTS fetch from ElevenLabs:', error);
             return null;
         }
     };
@@ -2029,10 +2054,30 @@ const PatientVisualizer = ({ latestPatientMessage }: { latestPatientMessage: str
 
         const playAudio = async () => {
             if (displayedMessage && playersReady.idle && playersReady.talking) {
+                 // Stop any currently playing audio before starting new TTS
+                if (audioRef.current && !audioRef.current.paused) {
+                    audioRef.current.pause();
+                }
+
                 audioUrl = await getElevenLabsAudio(displayedMessage, patientVideos.gender);
-                if (isMounted && audioRef.current && audioUrl) {
+                
+                if (!isMounted) {
+                    if (audioUrl) URL.revokeObjectURL(audioUrl);
+                    return;
+                }
+
+                if (audioRef.current && audioUrl) {
                     audioRef.current.src = audioUrl;
-                    audioRef.current.play().catch(e => console.error("Audio play failed:", e));
+                    audioRef.current.play().catch(e => {
+                        console.error("Audio play() failed. This might be due to browser autoplay restrictions.", e);
+                        setIsSpeaking(false); // Ensure state is correct on failure
+                    });
+                } else {
+                    // If audio generation failed, ensure we aren't stuck in a speaking state
+                    if (displayedMessage) {
+                        console.warn("TTS audio generation failed or returned null for message:", displayedMessage);
+                    }
+                    setIsSpeaking(false);
                 }
             }
         };
@@ -2051,8 +2096,12 @@ const PatientVisualizer = ({ latestPatientMessage }: { latestPatientMessage: str
         };
     }, [displayedMessage, playersReady, patientVideos.gender]);
     
-    // If we have videos, render the players, otherwise show the fallback icon.
-    if (!patientVideos.idle || !patientVideos.talking) {
+    const videosExist = patientVideos.idle && patientVideos.talking;
+    const arePlayersReady = playersReady.idle && playersReady.talking;
+    const isAvatarLoading = videosExist && !arePlayersReady;
+
+    // If we have no videos, show the fallback icon.
+    if (!videosExist) {
         return (
             <div className="patient-visualizer">
                 <div className="patient-icon-fallback">
@@ -2070,35 +2119,62 @@ const PatientVisualizer = ({ latestPatientMessage }: { latestPatientMessage: str
     
     return (
         <div className="patient-visualizer">
-            <div className={`patient-icon-fallback ${patientVideos.idle && playersReady.idle ? 'hidden' : ''}`}>
-                <IconPatient />
-                <p>Loading Patient Avatar...</p>
-            </div>
+             {isAvatarLoading && (
+                <div className="patient-loading-overlay">
+                    <div className="ekg-animation">
+                         <svg viewBox="0 0 100 30">
+                            <path className="ekg-path" d="M0 15 L20 15 L25 10 L35 20 L40 15 L45 15 L50 22 L55 8 L60 15 L100 15" fill="none" strokeWidth="1" />
+                        </svg>
+                    </div>
+                    <p>Preparing patient avatar...</p>
+                </div>
+            )}
             <iframe
                 ref={idlePlayerRef}
-                src={`https://play.gumlet.io/embed/${patientVideos.idle}?loop=1&autoplay=1&mute=1&disable_hotkeys=1&disable_ui=all`}
+                src={`https://play.gumlet.io/embed/${patientVideos.idle}?loop=1&autoplay=1&mute=1&disable_hotkeys=1&disable_ui=all&unmute_button=0`}
                 title="Idle Patient Video"
-                className={`patient-video ${isSpeaking ? 'hidden' : ''} ${!playersReady.idle ? 'hidden' : ''}`}
+                className={`patient-video ${isSpeaking ? 'video-hidden' : ''} ${isAvatarLoading ? 'video-invisible' : ''}`}
                 allow="autoplay; fullscreen"
             ></iframe>
             <iframe
                 ref={talkingPlayerRef}
-                src={`https://play.gumlet.io/embed/${patientVideos.talking}?loop=1&autoplay=1&mute=1&disable_hotkeys=1&disable_ui=all`}
+                src={`https://play.gumlet.io/embed/${patientVideos.talking}?loop=1&autoplay=1&mute=1&disable_hotkeys=1&disable_ui=all&unmute_button=0`}
                 title="Talking Patient Video"
-                className={`patient-video ${!isSpeaking ? 'hidden' : ''} ${!playersReady.talking ? 'hidden' : ''}`}
+                className={`patient-video ${!isSpeaking ? 'video-hidden' : ''} ${isAvatarLoading ? 'video-invisible' : ''}`}
                 allow="autoplay; fullscreen"
             ></iframe>
             <audio
                 ref={audioRef}
                 onPlay={() => setIsSpeaking(true)}
                 onEnded={() => setIsSpeaking(false)}
-                onError={() => {
-                    console.error("Audio playback error.");
+                onError={(e) => {
+                    const audioEl = e.currentTarget;
+                    const error = audioEl.error;
+                    let errorMessage = "An unknown audio error occurred.";
+                    if (error) {
+                        switch (error.code) {
+                            case 1: // MEDIA_ERR_ABORTED
+                                errorMessage = "Playback aborted.";
+                                break;
+                            case 2: // MEDIA_ERR_NETWORK
+                                errorMessage = "A network error occurred.";
+                                break;
+                            case 3: // MEDIA_ERR_DECODE
+                                errorMessage = "The audio could not be decoded; it may be corrupted.";
+                                break;
+                            case 4: // MEDIA_ERR_SRC_NOT_SUPPORTED
+                                errorMessage = "The audio format is not supported.";
+                                break;
+                            default:
+                                errorMessage = `An unknown error occurred (code: ${error.code}).`;
+                        }
+                    }
+                    console.error("Audio playback error:", errorMessage, { src: audioEl.src, errorObject: error });
                     setIsSpeaking(false);
                 }}
                 hidden
             />
-            {displayedMessage && (
+            {displayedMessage && !isAvatarLoading && (
                 <p className="patient-subtitle-overlay" role="status">
                     {displayedMessage}
                 </p>
